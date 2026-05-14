@@ -1,0 +1,13 @@
+# Ambiente Python
+venv/
+__pycache__/
+*.pyc
+
+# Chaves e Senhas
+firebase_credentials.json
+.env
+.env.local
+
+# Pastas pesadas do Next.js (o Next já tem o dele, mas garantimos aqui)
+painel-viagens/node_modules/
+painel-viagens/.next/
