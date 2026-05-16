@@ -88,6 +88,7 @@ export default function FormularioCotacao({
           <option value="Azul">Azul</option>
           <option value="GOL">GOL</option>
           <option value="Latam">Latam</option>
+          <option value="Latam">Latam</option>
         </select>
 
         <div className="grid grid-cols-2 gap-4">
