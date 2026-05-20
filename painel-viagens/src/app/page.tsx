@@ -68,37 +68,46 @@ export default function Home() {
         setHoraChegadaIda(matches[1].hora); setDestino(matches[1].aeroporto);
       }
 
+      // =======================================================
+      // NOVO BLOCO BLINDADO DE EXTRAÇÃO DE DATAS
+      // =======================================================
       let datasEncontradas: string[] = [];
       const dateRegex1 = /(\d{2})\/(\d{2})\/(\d{4})/g;
       const matchDates1 = [...text.matchAll(dateRegex1)];
       
       if (matchDates1.length > 0) {
+        // Pega padrão completo (ex: 08/04/2026)
         datasEncontradas = matchDates1.map(m => `${m[3]}-${m[2]}-${m[1]}`);
       } else {
+        // Dicionário completo para não cair em palavras falsas ("65 de taxa")
         const meses: Record<string, string> = {
-            janeiro: '01', fevereiro: '02', março: '03', marco: '03', abril: '04',
-            maio: '05', junho: '06', julho: '07', agosto: '08', setembro: '09',
-            outubro: '10', novembro: '11', dezembro: '12', jul: '07'
+            janeiro: '01', jan: '01', fevereiro: '02', fev: '02', março: '03', marco: '03', mar: '03', abril: '04', abr: '04',
+            maio: '05', mai: '05', junho: '06', jun: '06', julho: '07', jul: '07', agosto: '08', ago: '08', setembro: '09', set: '09',
+            outubro: '10', out: '10', novembro: '11', nov: '11', dezembro: '12', dez: '12'
         };
-        const dateRegexFull = /(\d{1,2})\s*de\s*([a-zA-Zç]+)\s*de\s*(\d{4})/gi;
-        const matchDatesFull = [...text.matchAll(dateRegexFull)];
         
-        if (matchDatesFull.length > 0) {
-            datasEncontradas = matchDatesFull.map(m => {
+        // Pega "04 de jul.", "04 de julho" ou "04 de julho de 2026"
+        const dateRegexText = /(\d{1,2})\s*de\s*([a-zA-Zç]+)\.?(?:\s*de\s*(\d{4}))?/gi;
+        const matchDatesText = [...text.matchAll(dateRegexText)];
+        
+        matchDatesText.forEach(m => {
+            const mesTexto = m[2].toLowerCase();
+            // A MÁGICA AQUI: Só aceita a data se a palavra constar no nosso dicionário de meses!
+            if (meses[mesTexto]) {
                 const dia = m[1].padStart(2, '0');
-                const mes = meses[m[2].toLowerCase()] || '01';
-                return `${m[3]}-${mes}-${dia}`;
-            });
-        } else {
-            const dateRegexShort = /(\d{1,2})\s*de\s*([a-zA-Zç]+)/gi;
-            const matchDatesShort = [...text.matchAll(dateRegexShort)];
-            if (matchDatesShort.length > 0) {
-                datasEncontradas = matchDatesShort.map(m => {
-                    const dia = m[1].padStart(2, '0');
-                    const mes = meses[m[2].toLowerCase()] || '01';
-                    return `${new Date().getFullYear()}-${mes}-${dia}`;
-                });
+                const mes = meses[mesTexto];
+                const ano = m[3] || new Date().getFullYear().toString();
+                datasEncontradas.push(`${ano}-${mes}-${dia}`);
             }
+        });
+
+        // Se ainda estiver vazio, tenta o padrão curto da Azul (ex: 05/08)
+        if (datasEncontradas.length === 0) {
+            const dateRegexCurto = /(\d{2})\/(\d{2})(?!\/\d{4})/g;
+            const matchDatesCurto = [...text.matchAll(dateRegexCurto)];
+            matchDatesCurto.forEach(m => {
+                datasEncontradas.push(`${new Date().getFullYear()}-${m[2]}-${m[1]}`);
+            });
         }
       }
 
@@ -108,7 +117,9 @@ export default function Home() {
          setDataIda(datasEncontradas[0]); setDataVolta(datasEncontradas[1]);
       } else if (datasEncontradas.length === 1) {
          setDataIda(datasEncontradas[0]);
+         setDataVolta(''); // Limpa a volta se copiou apenas um trecho
       }
+      // =======================================================
 
       if (/azul/i.test(text)) setCompanhia("Azul");
       else if (/smiles|gol/i.test(text)) setCompanhia("GOL");
