@@ -1,4 +1,14 @@
-import { maskHora } from '../utils/viagemUtils';
+import { collection, getDocs } from 'firebase/firestore';
+import db from '../lib/firebase';
+import { useEffect, useState } from 'react';
+
+// Função auxiliar para garantir que a máscara de hora funcione perfeitamente
+const maskHora = (value: string) => {
+  return value
+    .replace(/\D/g, '') // Remove tudo o que não é número
+    .replace(/(\d{2})(\d)/, '$1:$2') // Coloca os dois pontos
+    .slice(0, 5); // Limita a 5 caracteres (Ex: 14:30)
+};
 
 interface FormularioCotacaoProps {
   cliente: string; setCliente: (v: string) => void;
@@ -29,6 +39,33 @@ export default function FormularioCotacao({
   handleSmartPaste, gerarCotacao
 }: FormularioCotacaoProps) {
   
+  // 🧠 ESTADOS DA MEMÓRIA DE CLIENTES
+  const [clientesAntigos, setClientesAntigos] = useState<string[]>([]);
+  const [mostrarSugestoes, setMostrarSugestoes] = useState(false);
+
+  // 🧠 BUSCAR CLIENTES NO FIREBASE AO CARREGAR
+  useEffect(() => {
+    const buscarNomes = async () => {
+      try {
+        const querySnapshot = await getDocs(collection(db, 'cotacoes'));
+        const nomes = new Set<string>();
+        querySnapshot.forEach((doc) => {
+          const nomeCliente = doc.data().cliente;
+          if (nomeCliente) nomes.add(nomeCliente);
+        });
+        setClientesAntigos(Array.from(nomes));
+      } catch (error) {
+        console.error("Erro ao buscar clientes antigos:", error);
+      }
+    };
+    buscarNomes();
+  }, []);
+
+  // 🧠 FILTRAR NOMES CONFORME DIGITAÇÃO
+  const clientesSugeridos = clientesAntigos.filter(nome => 
+    nome.toLowerCase().includes(cliente.toLowerCase()) && cliente.length > 0
+  );
+
   return (
     <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-200">
       <div className="flex justify-between items-end mb-4">
@@ -42,7 +79,39 @@ export default function FormularioCotacao({
       </div>
 
       <div className="space-y-4">
-        <input type="text" value={cliente} onChange={(e) => setCliente(e.target.value)} placeholder="Nome do Cliente" className="w-full px-4 py-2 border rounded-lg bg-slate-50 focus:bg-white transition" />
+        
+        {/* CAMPO DE CLIENTE COM AUTO-COMPLETAR */}
+        <div className="relative">
+          <input 
+            type="text" 
+            value={cliente} 
+            onChange={(e) => {
+              setCliente(e.target.value);
+              setMostrarSugestoes(true);
+            }} 
+            onBlur={() => setTimeout(() => setMostrarSugestoes(false), 200)}
+            placeholder="Nome do Cliente" 
+            className="w-full px-4 py-2 border rounded-lg bg-slate-50 focus:bg-white transition" 
+          />
+          
+          {/* LISTA SUSPENSA DE SUGESTÕES */}
+          {mostrarSugestoes && clientesSugeridos.length > 0 && (
+            <ul className="absolute z-10 w-full bg-white border rounded-lg shadow-lg mt-1 max-h-40 overflow-y-auto">
+              {clientesSugeridos.map((nome, index) => (
+                <li 
+                  key={index}
+                  className="px-4 py-2 hover:bg-blue-50 cursor-pointer text-slate-700 text-sm font-medium transition"
+                  onClick={() => {
+                    setCliente(nome);
+                    setMostrarSugestoes(false);
+                  }}
+                >
+                  {nome}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
         
         <div className="grid grid-cols-2 gap-4">
           <input type="text" value={origem} onChange={(e) => setOrigem(e.target.value.toUpperCase())} placeholder="Origem (Ex: SSA)" maxLength={3} className="w-full px-4 py-2 border rounded-lg bg-slate-50 uppercase text-center" />
@@ -87,7 +156,6 @@ export default function FormularioCotacao({
         <select value={companhia} onChange={(e) => setCompanhia(e.target.value)} className="w-full px-4 py-2 border rounded-lg bg-white font-semibold text-slate-700">
           <option value="Azul">Azul</option>
           <option value="GOL">GOL</option>
-          <option value="Latam">Latam</option>
           <option value="Latam">Latam</option>
         </select>
 
