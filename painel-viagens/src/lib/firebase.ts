@@ -1,6 +1,6 @@
-// Import the functions you need from the SDKs you need
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore"; // <-- Adicionamos a importação do Firestore
+import { getFirestore } from "firebase/firestore";
+import { getAuth } from "firebase/auth"; // 1. Importa o serviço de autenticação
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -8,16 +8,16 @@ const firebaseConfig = {
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
 
-// Initialize Firebase
+// Inicializa o Firebase apenas se não houver nenhuma inicialização prévia
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-// Initialize Firestore (o banco de dados)
+// Inicializa os serviços
 const db = getFirestore(app);
+const auth = getAuth(app); // 2. Inicializa o Auth do Firebase
 
-// Exportamos o db como padrão para as suas páginas continuarem funcionando sem precisar alterar nada nelas!
+// 3. Exporta o auth (para o login) e o db (para o histórico e cotações)
+export { auth };
 export default db;
-export { app };
