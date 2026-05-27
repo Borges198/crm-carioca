@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import db from '../../lib/firebase';
-import { collection, query, orderBy, getDocs, doc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
+import { collection, query, where, orderBy, getDocs, doc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import Link from 'next/link';
+import AuthGuard from '../../components/AuthGuard';
+import { useAuth } from '../../context/AuthContext';
 
 interface Cotacao {
   id: string;
@@ -18,6 +20,15 @@ interface Cotacao {
 }
 
 export default function Historico() {
+  return (
+    <AuthGuard>
+      <HistoricoContent />
+    </AuthGuard>
+  );
+}
+
+function HistoricoContent() {
+  const { user } = useAuth();
   const [cotacoes, setCotacoes] = useState<Cotacao[]>([]);
   const [carregando, setCarregando] = useState(true);
 
@@ -32,9 +43,17 @@ export default function Historico() {
   const [editDataIda, setEditDataIda] = useState('');
 
   useEffect(() => {
+    if (!user) {
+      return;
+    }
+
     const buscarDados = async () => {
       try {
-        const q = query(collection(db, "cotacoes"), orderBy("dataRegistro", "desc"));
+        const q = query(
+          collection(db, "cotacoes"),
+          where("ownerId", "==", user.uid),
+          orderBy("dataRegistro", "desc")
+        );
         const querySnapshot = await getDocs(q);
         const dados = querySnapshot.docs.map(doc => ({ 
           id: doc.id, 
@@ -49,7 +68,7 @@ export default function Historico() {
     };
 
     buscarDados();
-  }, []);
+  }, [user]);
 
   const abrirModalEdicao = (item: Cotacao) => {
     setCotacaoEmEdicao(item);

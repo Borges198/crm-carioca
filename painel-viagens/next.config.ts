@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'export',
+  turbopack: { root: __dirname },
   // Caso use imagens da internet no futuro, evitamos erros no export:
   images: { unoptimized: true } 
 };

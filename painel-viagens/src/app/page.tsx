@@ -10,8 +10,10 @@ import Link from 'next/link';
 import { VALOR_MILHEIRO, isHoraValida, calcularDuracao } from '../utils/viagemUtils';
 import FormularioCotacao from '../components/FormularioCotacao';
 import BilhetePreview from '../components/BilhetePreview';
+import { useAuth } from '../context/AuthContext';
 
 export default function Home() {
+  const { user } = useAuth();
   const [cliente, setCliente] = useState('');
   const [origem, setOrigem] = useState('');
   const [destino, setDestino] = useState('');
@@ -162,13 +164,18 @@ export default function Home() {
       }
 
       alert("✨ Voo extraído e colado com sucesso!");
-    } catch (err) {
+    } catch {
       alert("Não foi possível colar. Verifique a permissão da área de transferência.");
     }
   };
 
   const gerarCotacao = async () => {
     try {
+      if (!user) {
+        alert("Você precisa estar logado para salvar uma cotação.");
+        return;
+      }
+
       if (!isHoraValida(horaSaidaIda) || !isHoraValida(horaChegadaIda)) {
         alert("Atenção: Os horários do voo de IDA estão inválidos."); return;
       }
@@ -193,6 +200,7 @@ export default function Home() {
 
       const novaCotacao = {
         cliente, origem, destino, companhia, tipoVoo,
+        ownerId: user.uid,
         dataIda: dataIdaFormatada, horaSaidaIda, horaChegadaIda, duracaoIda: calcularDuracao(horaSaidaIda, horaChegadaIda), paradasIda,
         dataVolta: tipoVoo === 'ida_volta' ? dataVoltaFormatada : null,
         valorTotal,

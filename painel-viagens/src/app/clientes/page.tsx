@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import db from '../../lib/firebase';
-import { collection, query, orderBy, getDocs, addDoc, doc, deleteDoc, updateDoc, Timestamp } from 'firebase/firestore';
+import { collection, query, where, orderBy, getDocs, addDoc, doc, deleteDoc, updateDoc, Timestamp } from 'firebase/firestore';
 import Link from 'next/link';
+import AuthGuard from '../../components/AuthGuard';
+import { useAuth } from '../../context/AuthContext';
 
 interface Cliente {
   id: string;
@@ -15,6 +17,15 @@ interface Cliente {
 }
 
 export default function Clientes() {
+  return (
+    <AuthGuard>
+      <ClientesContent />
+    </AuthGuard>
+  );
+}
+
+function ClientesContent() {
+  const { user } = useAuth();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [carregando, setCarregando] = useState(true);
   
@@ -32,9 +43,17 @@ export default function Clientes() {
   const [editViagem, setEditViagem] = useState('');
 
   useEffect(() => {
+    if (!user) {
+      return;
+    }
+
     const buscarClientes = async () => {
       try {
-        const q = query(collection(db, "clientes"), orderBy("dataCadastro", "desc"));
+        const q = query(
+          collection(db, "clientes"),
+          where("ownerId", "==", user.uid),
+          orderBy("dataCadastro", "desc")
+        );
         const querySnapshot = await getDocs(q);
         const dados = querySnapshot.docs.map(doc => ({ 
           id: doc.id, 
@@ -49,11 +68,12 @@ export default function Clientes() {
     };
 
     buscarClientes();
-  }, []);
+  }, [user]);
 
   const adicionarClienteLegado = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!novoNome) return alert("O nome é obrigatório!");
+    if (!user) return alert("Você precisa estar logado para salvar um cliente.");
 
     try {
       const novoCliente = {
@@ -61,6 +81,7 @@ export default function Clientes() {
         telefone: novoTelefone || 'Não informado',
         origemLead: "Legado (WhatsApp)",
         primeiraViagem: novaViagem || 'Não informada',
+        ownerId: user.uid,
         dataCadastro: new Date()
       };
 
