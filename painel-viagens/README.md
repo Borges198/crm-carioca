@@ -1,3 +1,27 @@
+# Painel de Viagens
+
+Sistema para criacao e gestao de cotacoes de viagens.
+
+## Documentacao do projeto
+
+- [Setup local e observacoes de build](../docs/local-setup.md)
+- [Proposta de seguranca Firestore](../docs/firestore-security-proposal.md)
+
+## Comandos principais
+
+```bash
+npm install
+npm run dev
+npm run lint
+npm run build
+```
+
+`npm run build` pode precisar de internet para baixar as fontes Geist e Geist Mono via `next/font`. Se a falha for apenas fetch dessas fontes, isso nao indica necessariamente erro no codigo.
+
+Novas cotacoes e novos clientes usam `ownerId`. Documentos antigos sem `ownerId` nao aparecem nas telas filtradas por usuario.
+
+---
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started

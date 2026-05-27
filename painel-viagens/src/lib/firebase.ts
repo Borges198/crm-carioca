@@ -1,5 +1,6 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp, getApps, getApp } from "firebase/app";
+import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore"; // <-- Adicionamos a importação do Firestore
 
 const firebaseConfig = {
@@ -17,7 +18,8 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
 // Initialize Firestore (o banco de dados)
 const db = getFirestore(app);
+const auth = getAuth(app);
 
 // Exportamos o db como padrão para as suas páginas continuarem funcionando sem precisar alterar nada nelas!
 export default db;
-export { app };
+export { app, auth };
