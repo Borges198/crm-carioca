@@ -1,6 +1,6 @@
-import { collection, getDocs } from 'firebase/firestore';
-import db from '../lib/firebase';
 import { useEffect, useState } from 'react';
+import { listarNomesClientesDasCotacoes } from '../services/cotacoesService';
+import type { Companhia } from '../types';
 
 // Função auxiliar para garantir que a máscara de hora funcione perfeitamente
 const maskHora = (value: string) => {
@@ -11,10 +11,11 @@ const maskHora = (value: string) => {
 };
 
 interface FormularioCotacaoProps {
+  userId?: string;
   cliente: string; setCliente: (v: string) => void;
   origem: string; setOrigem: (v: string) => void;
   destino: string; setDestino: (v: string) => void;
-  companhia: string; setCompanhia: (v: string) => void;
+  companhia: Companhia; setCompanhia: (v: Companhia) => void;
   tipoVoo: string; setTipoVoo: (v: string) => void;
   dataIda: string; setDataIda: (v: string) => void;
   horaSaidaIda: string; setHoraSaidaIda: (v: string) => void;
@@ -31,6 +32,7 @@ interface FormularioCotacaoProps {
 }
 
 export default function FormularioCotacao({
+  userId,
   cliente, setCliente, origem, setOrigem, destino, setDestino,
   companhia, setCompanhia, tipoVoo, setTipoVoo,
   dataIda, setDataIda, horaSaidaIda, setHoraSaidaIda, horaChegadaIda, setHoraChegadaIda, paradasIda, setParadasIda,
@@ -45,26 +47,27 @@ export default function FormularioCotacao({
 
   // 🧠 BUSCAR CLIENTES NO FIREBASE AO CARREGAR
   useEffect(() => {
+    if (!userId) {
+      return;
+    }
+
     const buscarNomes = async () => {
       try {
-        const querySnapshot = await getDocs(collection(db, 'cotacoes'));
-        const nomes = new Set<string>();
-        querySnapshot.forEach((doc) => {
-          const nomeCliente = doc.data().cliente;
-          if (nomeCliente) nomes.add(nomeCliente);
-        });
-        setClientesAntigos(Array.from(nomes));
+        const nomes = await listarNomesClientesDasCotacoes(userId);
+        setClientesAntigos(nomes);
       } catch (error) {
         console.error("Erro ao buscar clientes antigos:", error);
       }
     };
     buscarNomes();
-  }, []);
+  }, [userId]);
 
   // 🧠 FILTRAR NOMES CONFORME DIGITAÇÃO
-  const clientesSugeridos = clientesAntigos.filter(nome => 
-    nome.toLowerCase().includes(cliente.toLowerCase()) && cliente.length > 0
-  );
+  const clientesSugeridos = userId
+    ? clientesAntigos.filter(nome => 
+        nome.toLowerCase().includes(cliente.toLowerCase()) && cliente.length > 0
+      )
+    : [];
 
   return (
     <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-200">
@@ -153,7 +156,7 @@ export default function FormularioCotacao({
           </div>
         )}
 
-        <select value={companhia} onChange={(e) => setCompanhia(e.target.value)} className="w-full px-4 py-2 border rounded-lg bg-white font-semibold text-slate-700">
+        <select value={companhia} onChange={(e) => setCompanhia(e.target.value as Companhia)} className="w-full px-4 py-2 border rounded-lg bg-white font-semibold text-slate-700">
           <option value="Azul">Azul</option>
           <option value="GOL">GOL</option>
           <option value="Latam">Latam</option>

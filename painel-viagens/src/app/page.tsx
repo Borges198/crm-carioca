@@ -1,8 +1,6 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import db from '../lib/firebase';
-import { collection, addDoc } from 'firebase/firestore';
 import { toPng } from 'html-to-image';
 import Link from 'next/link';
 
@@ -11,13 +9,15 @@ import { VALOR_MILHEIRO, isHoraValida, calcularDuracao } from '../utils/viagemUt
 import FormularioCotacao from '../components/FormularioCotacao';
 import BilhetePreview from '../components/BilhetePreview';
 import { useAuth } from '../context/AuthContext';
+import { criarCotacao } from '../services/cotacoesService';
+import type { Companhia, NovaCotacao } from '../types';
 
 export default function Home() {
   const { user } = useAuth();
   const [cliente, setCliente] = useState('');
   const [origem, setOrigem] = useState('');
   const [destino, setDestino] = useState('');
-  const [companhia, setCompanhia] = useState('Azul');
+  const [companhia, setCompanhia] = useState<Companhia>('Azul');
   const [tipoVoo, setTipoVoo] = useState('ida');
 
   // Campos de Ida
@@ -198,7 +198,7 @@ export default function Home() {
       const dataIdaFormatada = dataIda ? dataIda.split('-').reverse().join('-') : '';
       const dataVoltaFormatada = dataVolta ? dataVolta.split('-').reverse().join('-') : '';
 
-      const novaCotacao = {
+      const novaCotacao: NovaCotacao = {
         cliente, origem, destino, companhia, tipoVoo,
         ownerId: user.uid,
         dataIda: dataIdaFormatada, horaSaidaIda, horaChegadaIda, duracaoIda: calcularDuracao(horaSaidaIda, horaChegadaIda), paradasIda,
@@ -208,7 +208,7 @@ export default function Home() {
         status: 'Novo 🆕'
       };
 
-      await addDoc(collection(db, "cotacoes"), novaCotacao);
+      await criarCotacao(novaCotacao);
       
       const textoMensagem = `Cotação ${cliente}\n${valorTotal}\n\nAgência Voo Singular`;
       setMensagemWhatsapp(textoMensagem);
@@ -246,6 +246,7 @@ export default function Home() {
 
         {/* INVOCANDO O FORMULÁRIO */}
         <FormularioCotacao 
+          userId={user?.uid}
           cliente={cliente} setCliente={setCliente}
           origem={origem} setOrigem={setOrigem}
           destino={destino} setDestino={setDestino}

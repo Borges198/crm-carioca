@@ -1,9 +1,10 @@
 import { RefObject } from 'react';
 import { calcularDuracao } from '../utils/viagemUtils';
+import type { Companhia } from '../types';
 
 interface BilhetePreviewProps {
   ticketRef: RefObject<HTMLDivElement | null>;
-  companhia: string;
+  companhia: Companhia;
   origem: string;
   destino: string;
   tipoVoo: string;
