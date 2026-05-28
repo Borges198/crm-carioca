@@ -12,6 +12,40 @@ export const calcularValorTotal = (
   return (qtdPontos * VALOR_MILHEIRO[companhia]) + taxa;
 };
 
+interface CalculoTrechoInput {
+  pontos?: number | null;
+  taxa?: number | null;
+  companhia?: string | null;
+}
+
+interface CalculoTrechosInput {
+  ida?: CalculoTrechoInput | null;
+  volta?: CalculoTrechoInput | null;
+}
+
+export const calcularValorTrecho = (
+  pontos: number,
+  taxa: number,
+  companhia: string
+) => {
+  return (pontos * VALOR_MILHEIRO[companhia]) + taxa;
+};
+
+export const calcularValorTotalTrechos = ({ ida, volta }: CalculoTrechosInput) => {
+  const calcularComFallback = (trecho?: CalculoTrechoInput | null) => {
+    if (!trecho?.companhia || !(trecho.companhia in VALOR_MILHEIRO)) {
+      return 0;
+    }
+
+    const pontos = trecho.pontos ?? 0;
+    const taxa = trecho.taxa ?? 0;
+
+    return calcularValorTrecho(pontos, taxa, trecho.companhia);
+  };
+
+  return calcularComFallback(ida) + calcularComFallback(volta);
+};
+
 export const normalizarDataParaCotacao = (data: string) => {
   return data ? data.split('-').reverse().join('-') : '';
 };
