@@ -19,11 +19,19 @@ interface MontarNovaCotacaoInput {
   qtdPontos: number;
   taxaEmbarque: number;
   valorTotal: number;
+  companhiaIda?: Companhia | string;
+  companhiaVolta?: Companhia | string | null;
+  pontosIda?: number;
+  pontosVolta?: number | null;
+  taxaIda?: number;
+  taxaVolta?: number | null;
+  valorIda?: number;
+  valorVolta?: number | null;
   mensagem?: string;
 }
 
 export function montarNovaCotacao(input: MontarNovaCotacaoInput): NovaCotacao {
-  return {
+  const novaCotacao: NovaCotacao = {
     cliente: input.cliente,
     origem: input.origem,
     destino: input.destino,
@@ -40,4 +48,31 @@ export function montarNovaCotacao(input: MontarNovaCotacaoInput): NovaCotacao {
     dataRegistro: new Date(),
     status: 'Novo 🆕'
   };
+
+  if (typeof input.companhiaIda !== 'undefined') {
+    novaCotacao.companhiaIda = input.companhiaIda;
+  }
+  if (typeof input.companhiaVolta !== 'undefined') {
+    novaCotacao.companhiaVolta = input.companhiaVolta;
+  }
+  if (typeof input.pontosIda !== 'undefined') {
+    novaCotacao.pontosIda = input.pontosIda;
+  }
+  if (typeof input.pontosVolta !== 'undefined') {
+    novaCotacao.pontosVolta = input.pontosVolta;
+  }
+  if (typeof input.taxaIda !== 'undefined') {
+    novaCotacao.taxaIda = input.taxaIda;
+  }
+  if (typeof input.taxaVolta !== 'undefined') {
+    novaCotacao.taxaVolta = input.taxaVolta;
+  }
+  if (typeof input.valorIda !== 'undefined') {
+    novaCotacao.valorIda = input.valorIda;
+  }
+  if (typeof input.valorVolta !== 'undefined') {
+    novaCotacao.valorVolta = input.valorVolta;
+  }
+
+  return novaCotacao;
 }
