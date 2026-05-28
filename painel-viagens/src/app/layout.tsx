@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Painel de Viagens",
-  description: "Sistema para criação e gestão de cotações de viagens.",
+  description: "Sistema para criacao e gestao de cotacoes de viagens.",
 };
 
 export default function RootLayout({
