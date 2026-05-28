@@ -1,23 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import db from '../../lib/firebase';
-import { collection, query, where, orderBy, getDocs, doc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
+import { Timestamp } from 'firebase/firestore';
 import Link from 'next/link';
 import AuthGuard from '../../components/AuthGuard';
 import { useAuth } from '../../context/AuthContext';
-
-interface Cotacao {
-  id: string;
-  cliente: string;
-  origem: string;
-  destino: string;
-  companhia: string;
-  valorTotal: number;
-  dataIda: string;
-  dataRegistro: Timestamp | string | number | Date;
-  status?: string;
-}
+import { atualizarCotacao, excluirCotacao as excluirCotacaoFirestore, listarCotacoesDoUsuario } from '../../services/cotacoesService';
+import type { Cotacao } from '../../types';
 
 export default function Historico() {
   return (
@@ -49,16 +38,7 @@ function HistoricoContent() {
 
     const buscarDados = async () => {
       try {
-        const q = query(
-          collection(db, "cotacoes"),
-          where("ownerId", "==", user.uid),
-          orderBy("dataRegistro", "desc")
-        );
-        const querySnapshot = await getDocs(q);
-        const dados = querySnapshot.docs.map(doc => ({ 
-          id: doc.id, 
-          ...doc.data() 
-        })) as Cotacao[];
+        const dados = await listarCotacoesDoUsuario(user.uid);
         setCotacoes(dados);
       } catch (error) {
         console.error("Erro ao buscar histórico:", error);
@@ -86,7 +66,6 @@ function HistoricoContent() {
     if (!cotacaoEmEdicao) return;
 
     try {
-      const docRef = doc(db, "cotacoes", cotacaoEmEdicao.id);
       const dadosAtualizados = {
         cliente: editCliente,
         origem: editOrigem,
@@ -96,7 +75,7 @@ function HistoricoContent() {
         dataIda: editDataIda,
       };
 
-      await updateDoc(docRef, dadosAtualizados);
+      await atualizarCotacao(cotacaoEmEdicao.id, dadosAtualizados);
 
       // Atualiza o estado local imediatamente
       setCotacoes(prev => prev.map(item => 
@@ -113,8 +92,7 @@ function HistoricoContent() {
 
   const alterarStatus = async (id: string, novoStatus: string) => {
     try {
-      const docRef = doc(db, "cotacoes", id);
-      await updateDoc(docRef, { status: novoStatus });
+      await atualizarCotacao(id, { status: novoStatus });
       
       setCotacoes(prev => prev.map(item => 
         item.id === id ? { ...item, status: novoStatus } : item
@@ -128,7 +106,7 @@ function HistoricoContent() {
     const confirmar = window.confirm(`Tem certeza que deseja excluir a cotação do(a) ${nomeCliente}?`);
     if (confirmar) {
       try {
-        await deleteDoc(doc(db, "cotacoes", id));
+        await excluirCotacaoFirestore(id);
         setCotacoes(prev => prev.filter(item => item.id !== id));
       } catch (error) {
         console.error("Erro ao excluir cotação:", error);

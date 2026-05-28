@@ -1,20 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import db from '../../lib/firebase';
-import { collection, query, where, orderBy, getDocs, addDoc, doc, deleteDoc, updateDoc, Timestamp } from 'firebase/firestore';
+import { Timestamp } from 'firebase/firestore';
 import Link from 'next/link';
 import AuthGuard from '../../components/AuthGuard';
 import { useAuth } from '../../context/AuthContext';
-
-interface Cliente {
-  id: string;
-  nome: string;
-  telefone?: string;
-  origemLead: string;
-  primeiraViagem: string;
-  dataCadastro: Timestamp | string | number | Date;
-}
+import { atualizarCliente, criarCliente, excluirCliente as excluirClienteFirestore, listarClientesDoUsuario } from '../../services/clientesService';
+import type { Cliente, NovoCliente } from '../../types';
 
 export default function Clientes() {
   return (
@@ -49,16 +41,7 @@ function ClientesContent() {
 
     const buscarClientes = async () => {
       try {
-        const q = query(
-          collection(db, "clientes"),
-          where("ownerId", "==", user.uid),
-          orderBy("dataCadastro", "desc")
-        );
-        const querySnapshot = await getDocs(q);
-        const dados = querySnapshot.docs.map(doc => ({ 
-          id: doc.id, 
-          ...doc.data() 
-        })) as Cliente[];
+        const dados = await listarClientesDoUsuario(user.uid);
         setClientes(dados);
       } catch (error) {
         console.error("Erro ao buscar clientes:", error);
@@ -76,7 +59,7 @@ function ClientesContent() {
     if (!user) return alert("Você precisa estar logado para salvar um cliente.");
 
     try {
-      const novoCliente = {
+      const novoCliente: NovoCliente = {
         nome: novoNome,
         telefone: novoTelefone || 'Não informado',
         origemLead: "Legado (WhatsApp)",
@@ -85,7 +68,7 @@ function ClientesContent() {
         dataCadastro: new Date()
       };
 
-      const docRef = await addDoc(collection(db, "clientes"), novoCliente);
+      const docRef = await criarCliente(novoCliente);
       setClientes([{ id: docRef.id, ...novoCliente }, ...clientes]);
       
       setNovoNome('');
@@ -110,14 +93,13 @@ function ClientesContent() {
     if (!clienteEmEdicao) return;
 
     try {
-      const docRef = doc(db, "clientes", clienteEmEdicao.id);
       const dadosAtualizados = {
         nome: editNome,
         telefone: editTelefone || 'Não informado',
         primeiraViagem: editViagem
       };
 
-      await updateDoc(docRef, dadosAtualizados);
+      await atualizarCliente(clienteEmEdicao.id, dadosAtualizados);
 
       setClientes(prev => prev.map(c => 
         c.id === clienteEmEdicao.id ? { ...c, ...dadosAtualizados } : c
@@ -134,7 +116,7 @@ function ClientesContent() {
   const excluirCliente = async (id: string, nomeCliente: string) => {
     if (window.confirm(`Tem a certeza que deseja remover ${nomeCliente}?`)) {
       try {
-        await deleteDoc(doc(db, "clientes", id));
+        await excluirClienteFirestore(id);
         setClientes(prev => prev.filter(item => item.id !== id));
       } catch (error) {
         console.error("Erro ao excluir cliente:", error);
