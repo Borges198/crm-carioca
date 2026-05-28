@@ -13,6 +13,7 @@ import { criarCotacao } from '../services/cotacoesService';
 import type { Companhia, NovaCotacao } from '../types';
 import { extrairDadosSmartPaste } from '../utils/smartPasteUtils';
 import { montarNovaCotacao } from '../utils/cotacaoMapper';
+import { gerarMensagemWhatsApp } from '../utils/whatsappMessageUtils';
 
 export default function Home() {
   const { user } = useAuth();
@@ -123,7 +124,7 @@ export default function Home() {
 
       await criarCotacao(novaCotacao);
       
-      const textoMensagem = `Cotação ${cliente}\n${valorTotal}\n\nAgência Voo Singular`;
+      const textoMensagem = gerarMensagemWhatsApp({ cliente, valorTotal });
       setMensagemWhatsapp(textoMensagem);
 
     } catch (erro) {
