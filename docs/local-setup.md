@@ -28,6 +28,12 @@ Rodar em desenvolvimento:
 npm run dev
 ```
 
+Rodar em desenvolvimento com limite de memoria e webpack:
+
+```bash
+NODE_OPTIONS="--max-old-space-size=1024" npx next dev --webpack
+```
+
 Validar lint:
 
 ```bash
@@ -56,6 +62,37 @@ Se o build falhar apenas com erro de fetch dessas fontes, isso nao significa nec
 Existe mais de um `package-lock.json` em diretorios acima do projeto. Para evitar que o Next/Turbopack infira a raiz errada, o projeto fixa a raiz em `painel-viagens/next.config.ts` usando `turbopack.root`.
 
 Mesmo assim, os comandos devem ser executados dentro de `painel-viagens`.
+
+## Troubleshooting do dev server Next
+
+Se uma nova tentativa de iniciar o dev server subir em `3001`, isso geralmente indica que a porta `3000` ainda esta ocupada por um servidor antigo.
+
+Verifique processos ativos relacionados a Next, Node ou npm:
+
+```bash
+ps aux | grep -E "next|node|npm" | grep -v grep
+```
+
+Se houver um servidor Next antigo e voce quiser reiniciar do zero, encerre os processos do dev server:
+
+```bash
+pkill -f "next-server"
+pkill -f "next dev"
+```
+
+Depois, limpe apenas o cache de desenvolvimento do Next. Nao apague `node_modules`.
+
+```bash
+rm -rf .next/dev
+```
+
+Inicie novamente em modo mais estavel:
+
+```bash
+NODE_OPTIONS="--max-old-space-size=1024" npx next dev --webpack
+```
+
+O arquivo `.next/dev/lock` pode apontar para PID e porta usados pelo dev server. Antes de limpar esse cache, confirme que nao ha processo Next ativo do projeto.
 
 ## Observacao sobre Firestore e ownerId
 
