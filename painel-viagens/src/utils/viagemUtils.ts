@@ -4,6 +4,18 @@ export const VALOR_MILHEIRO: Record<string, number> = {
   Latam: 27.00
 };
 
+export const calcularValorTotal = (
+  qtdPontos: number,
+  taxa: number,
+  companhia: string
+) => {
+  return (qtdPontos * VALOR_MILHEIRO[companhia]) + taxa;
+};
+
+export const normalizarDataParaCotacao = (data: string) => {
+  return data ? data.split('-').reverse().join('-') : '';
+};
+
 export const maskHora = (value: string) => {
   return value
     .replace(/\D/g, '')

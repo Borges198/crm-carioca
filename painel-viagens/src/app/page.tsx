@@ -5,12 +5,14 @@ import { toPng } from 'html-to-image';
 import Link from 'next/link';
 
 // IMPORTANDO NOSSAS CAIXINHAS DE LEGO
-import { VALOR_MILHEIRO, isHoraValida, calcularDuracao } from '../utils/viagemUtils';
+import { calcularValorTotal, isHoraValida, normalizarDataParaCotacao } from '../utils/viagemUtils';
 import FormularioCotacao from '../components/FormularioCotacao';
 import BilhetePreview from '../components/BilhetePreview';
 import { useAuth } from '../context/AuthContext';
 import { criarCotacao } from '../services/cotacoesService';
 import type { Companhia, NovaCotacao } from '../types';
+import { extrairDadosSmartPaste } from '../utils/smartPasteUtils';
+import { montarNovaCotacao } from '../utils/cotacaoMapper';
 
 export default function Home() {
   const { user } = useAuth();
@@ -46,122 +48,23 @@ export default function Home() {
         return;
       }
 
-      // Lógica do Smart Paste Manteve-se intacta aqui no "Maestro"
-      let matches: Array<{hora: string, aeroporto: string}> = [];
-      const timeAirportRegex = /(\d{1,2}:\d{2})\s*([A-Z]{3})/g; 
-      const timeAirportMatches = [...text.matchAll(timeAirportRegex)];
-      
-      if (timeAirportMatches.length > 0) {
-        matches = timeAirportMatches.map(m => ({ hora: m[1].padStart(5, '0'), aeroporto: m[2] }));
-      } else {
-        const smilesRegex = /([A-Z]{3})\s*(\d{2})h(\d{2})/g;
-        const smilesMatches = [...text.matchAll(smilesRegex)];
-        matches = smilesMatches.map(m => ({ hora: `${m[2]}:${m[3]}`, aeroporto: m[1] }));
-      }
+      const dadosExtraidos = extrairDadosSmartPaste(text);
 
-      if (matches.length >= 4) {
-        setTipoVoo('ida_volta');
-        setHoraSaidaIda(matches[0].hora); setOrigem(matches[0].aeroporto);
-        setHoraChegadaIda(matches[1].hora); setDestino(matches[1].aeroporto);
-        setHoraSaidaVolta(matches[2].hora); setHoraChegadaVolta(matches[3].hora);
-      } else if (matches.length >= 2) {
-        setTipoVoo('ida');
-        setHoraSaidaIda(matches[0].hora); setOrigem(matches[0].aeroporto);
-        setHoraChegadaIda(matches[1].hora); setDestino(matches[1].aeroporto);
-      }
-
-      // =======================================================
-      // NOVO BLOCO BLINDADO DE EXTRAÇÃO DE DATAS
-      // =======================================================
-      let datasEncontradas: string[] = [];
-      const dateRegex1 = /(\d{2})\/(\d{2})\/(\d{4})/g;
-      const matchDates1 = [...text.matchAll(dateRegex1)];
-      
-      if (matchDates1.length > 0) {
-        // Pega padrão completo (ex: 08/04/2026)
-        datasEncontradas = matchDates1.map(m => `${m[3]}-${m[2]}-${m[1]}`);
-      } else {
-        // Dicionário completo para não cair em palavras falsas ("65 de taxa")
-        const meses: Record<string, string> = {
-            janeiro: '01', jan: '01', fevereiro: '02', fev: '02', março: '03', marco: '03', mar: '03', abril: '04', abr: '04',
-            maio: '05', mai: '05', junho: '06', jun: '06', julho: '07', jul: '07', agosto: '08', ago: '08', setembro: '09', set: '09',
-            outubro: '10', out: '10', novembro: '11', nov: '11', dezembro: '12', dez: '12'
-        };
-        
-        // Pega "04 de jul.", "04 de julho" ou "04 de julho de 2026"
-        const dateRegexText = /(\d{1,2})\s*de\s*([a-zA-Zç]+)\.?(?:\s*de\s*(\d{4}))?/gi;
-        const matchDatesText = [...text.matchAll(dateRegexText)];
-        
-        matchDatesText.forEach(m => {
-            const mesTexto = m[2].toLowerCase();
-            // A MÁGICA AQUI: Só aceita a data se a palavra constar no nosso dicionário de meses!
-            if (meses[mesTexto]) {
-                const dia = m[1].padStart(2, '0');
-                const mes = meses[mesTexto];
-                const ano = m[3] || new Date().getFullYear().toString();
-                datasEncontradas.push(`${ano}-${mes}-${dia}`);
-            }
-        });
-
-        // Se ainda estiver vazio, tenta o padrão curto da Azul (ex: 05/08)
-        if (datasEncontradas.length === 0) {
-            const dateRegexCurto = /(\d{2})\/(\d{2})(?!\/\d{4})/g;
-            const matchDatesCurto = [...text.matchAll(dateRegexCurto)];
-            matchDatesCurto.forEach(m => {
-                datasEncontradas.push(`${new Date().getFullYear()}-${m[2]}-${m[1]}`);
-            });
-        }
-      }
-
-      datasEncontradas = Array.from(new Set(datasEncontradas));
-
-      if (datasEncontradas.length >= 2) {
-         setDataIda(datasEncontradas[0]); setDataVolta(datasEncontradas[1]);
-      } else if (datasEncontradas.length === 1) {
-         setDataIda(datasEncontradas[0]);
-         setDataVolta(''); // Limpa a volta se copiou apenas um trecho
-      }
-      // =======================================================
-
-      if (/azul/i.test(text)) setCompanhia("Azul");
-      else if (/smiles|gol/i.test(text)) setCompanhia("GOL");
-      else if (/latam/i.test(text)) setCompanhia("Latam");
-
-      const paradasMatches = [...text.matchAll(/(direto|1\s*conexão|1\s*conexao|1\s*parada|2\s*conexões|2\s*conexoes|2\s*paradas)/gi)];
-      const formatParada = (p: string) => {
-         if (/direto/i.test(p)) return "Direto";
-         if (/1/i.test(p)) return "1 Parada";
-         if (/2/i.test(p)) return "2 Paradas";
-         return "Direto";
-      };
-
-      if (paradasMatches.length >= 2) {
-         setParadasIda(formatParada(paradasMatches[0][0])); setParadasVolta(formatParada(paradasMatches[1][0]));
-      } else if (paradasMatches.length === 1) {
-         setParadasIda(formatParada(paradasMatches[0][0]));
-      }
-
-      const pontosRegex = /(\d{1,3}[.,]?\d{3}|\d{4,6})(?=\s*pts|\s*pontos|\s*milhas)/gi;
-      const pontosMatches = [...text.matchAll(pontosRegex)];
-      if (pontosMatches.length > 0) {
-         let maiorPonto = 0;
-         pontosMatches.forEach(m => {
-             const valorLimpo = parseInt(m[1].replace(/[.,]/g, ''), 10);
-             if (valorLimpo > maiorPonto) maiorPonto = valorLimpo;
-         });
-         if (maiorPonto > 0) setPontos(Math.ceil(maiorPonto / 1000).toString());
-      }
-
-      const taxaRegex = /(?:R\$|BRL)\s*(\d+[,.]\d{2})/gi;
-      const taxaMatches = [...text.matchAll(taxaRegex)];
-      if (taxaMatches.length > 0) {
-         let maiorTaxa = 0;
-         taxaMatches.forEach(m => {
-             const valorTaxaFloat = parseFloat(m[1].replace(',', '.'));
-             if (valorTaxaFloat > maiorTaxa) maiorTaxa = valorTaxaFloat;
-         });
-         if (maiorTaxa > 0) setTaxaEmbarque(Math.ceil(maiorTaxa).toString());
-      }
+      if (dadosExtraidos.tipoVoo) setTipoVoo(dadosExtraidos.tipoVoo);
+      if (dadosExtraidos.horaSaidaIda) setHoraSaidaIda(dadosExtraidos.horaSaidaIda);
+      if (dadosExtraidos.origem) setOrigem(dadosExtraidos.origem);
+      if (dadosExtraidos.horaChegadaIda) setHoraChegadaIda(dadosExtraidos.horaChegadaIda);
+      if (dadosExtraidos.destino) setDestino(dadosExtraidos.destino);
+      if (dadosExtraidos.horaSaidaVolta) setHoraSaidaVolta(dadosExtraidos.horaSaidaVolta);
+      if (dadosExtraidos.horaChegadaVolta) setHoraChegadaVolta(dadosExtraidos.horaChegadaVolta);
+      if (dadosExtraidos.dataIda) setDataIda(dadosExtraidos.dataIda);
+      if (dadosExtraidos.dataVolta) setDataVolta(dadosExtraidos.dataVolta);
+      else if (dadosExtraidos.limparDataVolta) setDataVolta('');
+      if (dadosExtraidos.companhia) setCompanhia(dadosExtraidos.companhia);
+      if (dadosExtraidos.paradasIda) setParadasIda(dadosExtraidos.paradasIda);
+      if (dadosExtraidos.paradasVolta) setParadasVolta(dadosExtraidos.paradasVolta);
+      if (dadosExtraidos.pontos) setPontos(dadosExtraidos.pontos);
+      if (dadosExtraidos.taxaEmbarque) setTaxaEmbarque(dadosExtraidos.taxaEmbarque);
 
       alert("✨ Voo extraído e colado com sucesso!");
     } catch {
@@ -193,20 +96,30 @@ export default function Home() {
         alert("Por favor, preencha os Pontos e a Taxa corretamente."); return;
       }
 
-      const valorTotal = (qtdPontos * VALOR_MILHEIRO[companhia]) + taxa;
+      const valorTotal = calcularValorTotal(qtdPontos, taxa, companhia);
       
-      const dataIdaFormatada = dataIda ? dataIda.split('-').reverse().join('-') : '';
-      const dataVoltaFormatada = dataVolta ? dataVolta.split('-').reverse().join('-') : '';
+      const dataIdaFormatada = normalizarDataParaCotacao(dataIda);
+      const dataVoltaFormatada = normalizarDataParaCotacao(dataVolta);
 
-      const novaCotacao: NovaCotacao = {
-        cliente, origem, destino, companhia, tipoVoo,
+      const novaCotacao: NovaCotacao = montarNovaCotacao({
         ownerId: user.uid,
-        dataIda: dataIdaFormatada, horaSaidaIda, horaChegadaIda, duracaoIda: calcularDuracao(horaSaidaIda, horaChegadaIda), paradasIda,
-        dataVolta: tipoVoo === 'ida_volta' ? dataVoltaFormatada : null,
-        valorTotal,
-        dataRegistro: new Date(),
-        status: 'Novo 🆕'
-      };
+        cliente,
+        origem,
+        destino,
+        companhia,
+        tipoVoo,
+        dataIda: dataIdaFormatada,
+        dataVolta: dataVoltaFormatada,
+        horaSaidaIda,
+        horaChegadaIda,
+        horaSaidaVolta,
+        horaChegadaVolta,
+        paradasIda,
+        paradasVolta,
+        qtdPontos,
+        taxaEmbarque: taxa,
+        valorTotal
+      });
 
       await criarCotacao(novaCotacao);
       
