@@ -21,6 +21,8 @@ export default function Home() {
   const [origem, setOrigem] = useState('');
   const [destino, setDestino] = useState('');
   const [companhia, setCompanhia] = useState<Companhia>('Azul');
+  const [companhiaIda, setCompanhiaIda] = useState('');
+  const [companhiaVolta, setCompanhiaVolta] = useState('');
   const [tipoVoo, setTipoVoo] = useState('ida');
 
   // Campos de Ida
@@ -41,6 +43,25 @@ export default function Home() {
 
   const ticketRef = useRef<HTMLDivElement>(null);
 
+  const sincronizarCompanhiasPorTrecho = (novaCompanhia: Companhia, novoTipoVoo: string) => {
+    setCompanhiaIda(novaCompanhia);
+    if (novoTipoVoo === 'ida_volta') {
+      setCompanhiaVolta(novaCompanhia);
+      return;
+    }
+    setCompanhiaVolta('');
+  };
+
+  const atualizarCompanhia = (novaCompanhia: Companhia, tipoVooAtual = tipoVoo) => {
+    setCompanhia(novaCompanhia);
+    sincronizarCompanhiasPorTrecho(novaCompanhia, tipoVooAtual);
+  };
+
+  const atualizarTipoVoo = (novoTipoVoo: string, companhiaAtual = companhia) => {
+    setTipoVoo(novoTipoVoo);
+    sincronizarCompanhiasPorTrecho(companhiaAtual, novoTipoVoo);
+  };
+
   const handleSmartPaste = async () => {
     try {
       const text = await navigator.clipboard.readText();
@@ -50,8 +71,10 @@ export default function Home() {
       }
 
       const dadosExtraidos = extrairDadosSmartPaste(text);
+      const tipoVooAtualizado = dadosExtraidos.tipoVoo || tipoVoo;
+      const companhiaAtualizada = dadosExtraidos.companhia || companhia;
 
-      if (dadosExtraidos.tipoVoo) setTipoVoo(dadosExtraidos.tipoVoo);
+      if (dadosExtraidos.tipoVoo) atualizarTipoVoo(dadosExtraidos.tipoVoo, companhiaAtualizada);
       if (dadosExtraidos.horaSaidaIda) setHoraSaidaIda(dadosExtraidos.horaSaidaIda);
       if (dadosExtraidos.origem) setOrigem(dadosExtraidos.origem);
       if (dadosExtraidos.horaChegadaIda) setHoraChegadaIda(dadosExtraidos.horaChegadaIda);
@@ -61,7 +84,7 @@ export default function Home() {
       if (dadosExtraidos.dataIda) setDataIda(dadosExtraidos.dataIda);
       if (dadosExtraidos.dataVolta) setDataVolta(dadosExtraidos.dataVolta);
       else if (dadosExtraidos.limparDataVolta) setDataVolta('');
-      if (dadosExtraidos.companhia) setCompanhia(dadosExtraidos.companhia);
+      if (dadosExtraidos.companhia) atualizarCompanhia(dadosExtraidos.companhia, tipoVooAtualizado);
       if (dadosExtraidos.paradasIda) setParadasIda(dadosExtraidos.paradasIda);
       if (dadosExtraidos.paradasVolta) setParadasVolta(dadosExtraidos.paradasVolta);
       if (dadosExtraidos.pontos) setPontos(dadosExtraidos.pontos);
@@ -164,8 +187,8 @@ export default function Home() {
           cliente={cliente} setCliente={setCliente}
           origem={origem} setOrigem={setOrigem}
           destino={destino} setDestino={setDestino}
-          companhia={companhia} setCompanhia={setCompanhia}
-          tipoVoo={tipoVoo} setTipoVoo={setTipoVoo}
+          companhia={companhia} setCompanhia={atualizarCompanhia}
+          tipoVoo={tipoVoo} setTipoVoo={atualizarTipoVoo}
           dataIda={dataIda} setDataIda={setDataIda}
           horaSaidaIda={horaSaidaIda} setHoraSaidaIda={setHoraSaidaIda}
           horaChegadaIda={horaChegadaIda} setHoraChegadaIda={setHoraChegadaIda}
@@ -189,7 +212,12 @@ export default function Home() {
 
             {/* INVOCANDO O BILHETE */}
             <BilhetePreview 
-              ticketRef={ticketRef} companhia={companhia} origem={origem} destino={destino}
+              ticketRef={ticketRef}
+              companhia={companhia}
+              companhiaIda={companhiaIda || undefined}
+              companhiaVolta={companhiaVolta || undefined}
+              origem={origem}
+              destino={destino}
               tipoVoo={tipoVoo} dataIda={dataIda} horaSaidaIda={horaSaidaIda} horaChegadaIda={horaChegadaIda} paradasIda={paradasIda}
               dataVolta={dataVolta} horaSaidaVolta={horaSaidaVolta} horaChegadaVolta={horaChegadaVolta} paradasVolta={paradasVolta}
             />
