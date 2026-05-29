@@ -5,6 +5,8 @@ import type { Companhia } from '../types';
 interface BilhetePreviewProps {
   ticketRef: RefObject<HTMLDivElement | null>;
   companhia: Companhia;
+  companhiaIda?: string;
+  companhiaVolta?: string | null;
   origem: string;
   destino: string;
   tipoVoo: string;
@@ -34,11 +36,11 @@ interface TrechoCardProps {
   horaSaida: string;
   horaChegada: string;
   paradas: string;
-  companhia: Companhia;
+  companhia: string;
   tema: TemaCompanhia;
 }
 
-function getTemaCompanhia(companhia: Companhia): TemaCompanhia {
+function getTemaCompanhia(companhia: string): TemaCompanhia {
   const companhiaKey = companhia.toLowerCase();
 
   if (companhiaKey === 'gol') {
@@ -156,6 +158,8 @@ function TrechoCard({
 export default function BilhetePreview({
   ticketRef,
   companhia,
+  companhiaIda,
+  companhiaVolta,
   origem,
   destino,
   tipoVoo,
@@ -168,14 +172,17 @@ export default function BilhetePreview({
   horaChegadaVolta,
   paradasVolta
 }: BilhetePreviewProps) {
-  const tema = getTemaCompanhia(companhia);
+  const companhiaTrechoIda = companhiaIda || companhia;
+  const companhiaTrechoVolta = companhiaVolta || companhiaIda || companhia;
+  const temaIda = getTemaCompanhia(companhiaTrechoIda);
+  const temaVolta = getTemaCompanhia(companhiaTrechoVolta);
 
   return (
     <div ref={ticketRef} className="w-[420px] max-w-full overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-sm">
       <header className="border-b border-slate-200 bg-slate-950 px-5 py-5 text-white">
         <div className="flex items-start justify-between gap-4">
           <div className="flex gap-3">
-            <div className={`flex h-10 w-10 items-center justify-center rounded-full ${tema.bg} text-lg font-black`}>
+            <div className={`flex h-10 w-10 items-center justify-center rounded-full ${temaIda.bg} text-lg font-black`}>
               ✈
             </div>
             <div>
@@ -199,8 +206,8 @@ export default function BilhetePreview({
                 {tipoVoo === 'ida_volta' ? 'Cotação de ida e volta' : 'Cotação de somente ida'}
               </p>
             </div>
-            <div className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white ${tema.bg}`}>
-              {companhia}
+            <div className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white ${temaIda.bg}`}>
+              {companhiaTrechoIda}
             </div>
           </div>
         </section>
@@ -213,8 +220,8 @@ export default function BilhetePreview({
           horaSaida={horaSaidaIda}
           horaChegada={horaChegadaIda}
           paradas={paradasIda}
-          companhia={companhia}
-          tema={tema}
+          companhia={companhiaTrechoIda}
+          tema={temaIda}
         />
 
         {tipoVoo === 'ida_volta' && (
@@ -226,8 +233,8 @@ export default function BilhetePreview({
             horaSaida={horaSaidaVolta}
             horaChegada={horaChegadaVolta}
             paradas={paradasVolta}
-            companhia={companhia}
-            tema={tema}
+            companhia={companhiaTrechoVolta}
+            tema={temaVolta}
           />
         )}
       </div>
