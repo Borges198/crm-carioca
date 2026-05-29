@@ -188,6 +188,8 @@ export default function Home() {
           origem={origem} setOrigem={setOrigem}
           destino={destino} setDestino={setDestino}
           companhia={companhia} setCompanhia={atualizarCompanhia}
+          companhiaIda={companhiaIda} setCompanhiaIda={setCompanhiaIda}
+          companhiaVolta={companhiaVolta} setCompanhiaVolta={setCompanhiaVolta}
           tipoVoo={tipoVoo} setTipoVoo={atualizarTipoVoo}
           dataIda={dataIda} setDataIda={setDataIda}
           horaSaidaIda={horaSaidaIda} setHoraSaidaIda={setHoraSaidaIda}
