@@ -16,6 +16,8 @@ interface FormularioCotacaoProps {
   origem: string; setOrigem: (v: string) => void;
   destino: string; setDestino: (v: string) => void;
   companhia: Companhia; setCompanhia: (v: Companhia) => void;
+  companhiaIda: string; setCompanhiaIda: (v: Companhia) => void;
+  companhiaVolta: string; setCompanhiaVolta: (v: Companhia) => void;
   tipoVoo: string; setTipoVoo: (v: string) => void;
   dataIda: string; setDataIda: (v: string) => void;
   horaSaidaIda: string; setHoraSaidaIda: (v: string) => void;
@@ -34,7 +36,7 @@ interface FormularioCotacaoProps {
 export default function FormularioCotacao({
   userId,
   cliente, setCliente, origem, setOrigem, destino, setDestino,
-  companhia, setCompanhia, tipoVoo, setTipoVoo,
+  companhia, setCompanhia, companhiaIda, setCompanhiaIda, companhiaVolta, setCompanhiaVolta, tipoVoo, setTipoVoo,
   dataIda, setDataIda, horaSaidaIda, setHoraSaidaIda, horaChegadaIda, setHoraChegadaIda, paradasIda, setParadasIda,
   dataVolta, setDataVolta, horaSaidaVolta, setHoraSaidaVolta, horaChegadaVolta, setHoraChegadaVolta, paradasVolta, setParadasVolta,
   pontos, setPontos, taxaEmbarque, setTaxaEmbarque,
@@ -161,6 +163,28 @@ export default function FormularioCotacao({
           <option value="GOL">GOL</option>
           <option value="Latam">Latam</option>
         </select>
+
+        <div className="grid grid-cols-1 gap-3">
+          <label className="block">
+            <span className="text-xs font-bold text-slate-500 uppercase mb-1 block">Companhia da ida</span>
+            <select value={companhiaIda || companhia} onChange={(e) => setCompanhiaIda(e.target.value as Companhia)} className="w-full px-4 py-2 border rounded-lg bg-white font-semibold text-slate-700">
+              <option value="Azul">Azul</option>
+              <option value="GOL">GOL</option>
+              <option value="Latam">Latam</option>
+            </select>
+          </label>
+
+          {tipoVoo === 'ida_volta' && (
+            <label className="block">
+              <span className="text-xs font-bold text-slate-500 uppercase mb-1 block">Companhia da volta</span>
+              <select value={companhiaVolta || companhia} onChange={(e) => setCompanhiaVolta(e.target.value as Companhia)} className="w-full px-4 py-2 border rounded-lg bg-white font-semibold text-slate-700">
+                <option value="Azul">Azul</option>
+                <option value="GOL">GOL</option>
+                <option value="Latam">Latam</option>
+              </select>
+            </label>
+          )}
+        </div>
 
         <div className="grid grid-cols-2 gap-4">
           <input type="text" value={pontos} onChange={(e) => setPontos(e.target.value)} placeholder="Pontos" className="w-full px-4 py-2 border rounded-lg bg-slate-50 text-center" />
