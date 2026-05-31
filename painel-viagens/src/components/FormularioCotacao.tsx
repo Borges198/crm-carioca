@@ -27,6 +27,10 @@ interface FormularioCotacaoProps {
   horaSaidaVolta: string; setHoraSaidaVolta: (v: string) => void;
   horaChegadaVolta: string; setHoraChegadaVolta: (v: string) => void;
   paradasVolta: string; setParadasVolta: (v: string) => void;
+  pontosIda: string; setPontosIda: (v: string) => void;
+  pontosVolta: string; setPontosVolta: (v: string) => void;
+  taxaIda: string; setTaxaIda: (v: string) => void;
+  taxaVolta: string; setTaxaVolta: (v: string) => void;
   pontos: string; setPontos: (v: string) => void;
   taxaEmbarque: string; setTaxaEmbarque: (v: string) => void;
   handleSmartPaste: () => void;
@@ -39,6 +43,7 @@ export default function FormularioCotacao({
   companhia, setCompanhia, companhiaIda, setCompanhiaIda, companhiaVolta, setCompanhiaVolta, tipoVoo, setTipoVoo,
   dataIda, setDataIda, horaSaidaIda, setHoraSaidaIda, horaChegadaIda, setHoraChegadaIda, paradasIda, setParadasIda,
   dataVolta, setDataVolta, horaSaidaVolta, setHoraSaidaVolta, horaChegadaVolta, setHoraChegadaVolta, paradasVolta, setParadasVolta,
+  pontosIda, setPontosIda, pontosVolta, setPontosVolta, taxaIda, setTaxaIda, taxaVolta, setTaxaVolta,
   pontos, setPontos, taxaEmbarque, setTaxaEmbarque,
   handleSmartPaste, gerarCotacao
 }: FormularioCotacaoProps) {
@@ -185,6 +190,30 @@ export default function FormularioCotacao({
             </label>
           )}
         </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <label className="block">
+            <span className="text-xs font-bold text-slate-500 uppercase mb-1 block">Pontos/Milhas da ida</span>
+            <input type="text" value={pontosIda} onChange={(e) => setPontosIda(e.target.value)} placeholder="Ida" className="w-full px-4 py-2 border rounded-lg bg-slate-50 text-center" />
+          </label>
+          <label className="block">
+            <span className="text-xs font-bold text-slate-500 uppercase mb-1 block">Taxa da ida</span>
+            <input type="text" value={taxaIda} onChange={(e) => setTaxaIda(e.target.value)} placeholder="Taxa ida" className="w-full px-4 py-2 border rounded-lg bg-slate-50 text-center" />
+          </label>
+        </div>
+
+        {tipoVoo === 'ida_volta' && (
+          <div className="grid grid-cols-2 gap-4">
+            <label className="block">
+              <span className="text-xs font-bold text-slate-500 uppercase mb-1 block">Pontos/Milhas da volta</span>
+              <input type="text" value={pontosVolta} onChange={(e) => setPontosVolta(e.target.value)} placeholder="Volta" className="w-full px-4 py-2 border rounded-lg bg-slate-50 text-center" />
+            </label>
+            <label className="block">
+              <span className="text-xs font-bold text-slate-500 uppercase mb-1 block">Taxa da volta</span>
+              <input type="text" value={taxaVolta} onChange={(e) => setTaxaVolta(e.target.value)} placeholder="Taxa volta" className="w-full px-4 py-2 border rounded-lg bg-slate-50 text-center" />
+            </label>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-4">
           <input type="text" value={pontos} onChange={(e) => setPontos(e.target.value)} placeholder="Pontos" className="w-full px-4 py-2 border rounded-lg bg-slate-50 text-center" />
