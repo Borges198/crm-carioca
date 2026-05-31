@@ -10,6 +10,11 @@ const maskHora = (value: string) => {
     .slice(0, 5); // Limita a 5 caracteres (Ex: 14:30)
 };
 
+const extrairNumero = (value: string) => {
+  const apenasNumeros = value.replace(/\D/g, '');
+  return apenasNumeros ? parseInt(apenasNumeros, 10) : 0;
+};
+
 interface FormularioCotacaoProps {
   userId?: string;
   cliente: string; setCliente: (v: string) => void;
@@ -34,6 +39,8 @@ interface FormularioCotacaoProps {
   pontos: string; setPontos: (v: string) => void;
   taxaEmbarque: string; setTaxaEmbarque: (v: string) => void;
   handleSmartPaste: () => void;
+  handleSmartPasteIda: () => void;
+  handleSmartPasteVolta: () => void;
   gerarCotacao: () => void;
 }
 
@@ -45,7 +52,7 @@ export default function FormularioCotacao({
   dataVolta, setDataVolta, horaSaidaVolta, setHoraSaidaVolta, horaChegadaVolta, setHoraChegadaVolta, paradasVolta, setParadasVolta,
   pontosIda, setPontosIda, pontosVolta, setPontosVolta, taxaIda, setTaxaIda, taxaVolta, setTaxaVolta,
   pontos, setPontos, taxaEmbarque, setTaxaEmbarque,
-  handleSmartPaste, gerarCotacao
+  handleSmartPaste, handleSmartPasteIda, handleSmartPasteVolta, gerarCotacao
 }: FormularioCotacaoProps) {
   
   // 🧠 ESTADOS DA MEMÓRIA DE CLIENTES
@@ -75,6 +82,13 @@ export default function FormularioCotacao({
         nome.toLowerCase().includes(cliente.toLowerCase()) && cliente.length > 0
       )
     : [];
+  const totalPontosTrechos = extrairNumero(pontosIda) + (tipoVoo === 'ida_volta' ? extrairNumero(pontosVolta) : 0);
+  const totalTaxasTrechos = extrairNumero(taxaIda) + (tipoVoo === 'ida_volta' ? extrairNumero(taxaVolta) : 0);
+  const mostrarResumoTrechos = Boolean(
+    pontosIda.trim() ||
+    taxaIda.trim() ||
+    (tipoVoo === 'ida_volta' && (pontosVolta.trim() || taxaVolta.trim()))
+  );
 
   return (
     <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-200">
@@ -134,7 +148,16 @@ export default function FormularioCotacao({
         </div>
 
         <div className="bg-blue-50 border border-blue-100 p-3 rounded-lg">
-          <span className="text-xs font-bold text-blue-800 mb-2 block">VOO DE IDA</span>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <span className="text-xs font-bold text-blue-800 block">VOO DE IDA</span>
+            <button
+              type="button"
+              onClick={handleSmartPasteIda}
+              className="bg-blue-100 text-blue-700 text-[11px] font-bold py-1 px-2 rounded-md hover:bg-blue-200 transition border border-blue-200"
+            >
+              Colar dados da ida
+            </button>
+          </div>
           <div className="grid grid-cols-2 gap-2 mb-2">
             <input type="date" value={dataIda} onChange={(e) => setDataIda(e.target.value)} className="col-span-2 px-2 py-1 border rounded text-sm bg-white text-slate-700" />
             <input type="text" value={horaSaidaIda} onChange={(e) => setHoraSaidaIda(maskHora(e.target.value))} placeholder="Saída" className="px-2 py-1 border rounded text-sm bg-white text-center" />
@@ -149,7 +172,16 @@ export default function FormularioCotacao({
 
         {tipoVoo === 'ida_volta' && (
           <div className="bg-orange-50 border border-orange-100 p-3 rounded-lg">
-            <span className="text-xs font-bold text-orange-800 mb-2 block">VOO DE VOLTA</span>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-xs font-bold text-orange-800 block">VOO DE VOLTA</span>
+              <button
+                type="button"
+                onClick={handleSmartPasteVolta}
+                className="bg-orange-100 text-orange-700 text-[11px] font-bold py-1 px-2 rounded-md hover:bg-orange-200 transition border border-orange-200"
+              >
+                Colar dados da volta
+              </button>
+            </div>
             <div className="grid grid-cols-2 gap-2 mb-2">
               <input type="date" value={dataVolta} onChange={(e) => setDataVolta(e.target.value)} className="col-span-2 px-2 py-1 border rounded text-sm bg-white text-slate-700" />
               <input type="text" value={horaSaidaVolta} onChange={(e) => setHoraSaidaVolta(maskHora(e.target.value))} placeholder="Saída" className="px-2 py-1 border rounded text-sm bg-white text-center" />
@@ -212,6 +244,19 @@ export default function FormularioCotacao({
               <span className="text-xs font-bold text-slate-500 uppercase mb-1 block">Taxa da volta</span>
               <input type="text" value={taxaVolta} onChange={(e) => setTaxaVolta(e.target.value)} placeholder="Taxa volta" className="w-full px-4 py-2 border rounded-lg bg-slate-50 text-center" />
             </label>
+          </div>
+        )}
+
+        {mostrarResumoTrechos && (
+          <div className="grid grid-cols-2 gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div>
+              <span className="text-[10px] font-bold uppercase text-slate-500">Total de pontos/milhas</span>
+              <p className="mt-1 text-lg font-black text-slate-900">{totalPontosTrechos}</p>
+            </div>
+            <div>
+              <span className="text-[10px] font-bold uppercase text-slate-500">Total de taxas</span>
+              <p className="mt-1 text-lg font-black text-slate-900">{totalTaxasTrechos}</p>
+            </div>
           </div>
         )}
 

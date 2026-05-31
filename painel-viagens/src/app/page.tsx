@@ -65,18 +65,31 @@ export default function Home() {
 
   const atualizarTipoVoo = (novoTipoVoo: string, companhiaAtual = companhia) => {
     setTipoVoo(novoTipoVoo);
-    sincronizarCompanhiasPorTrecho(companhiaAtual, novoTipoVoo);
+    if (novoTipoVoo === 'ida_volta') {
+      setCompanhiaIda(companhiaIda || companhiaAtual);
+      setCompanhiaVolta(companhiaVolta || companhiaIda || companhiaAtual);
+      setPontosIda(pontosIda || pontos);
+      setTaxaIda(taxaIda || taxaEmbarque);
+      return;
+    }
+
+    setCompanhiaVolta('');
+  };
+
+  const lerDadosSmartPaste = async () => {
+    const text = await navigator.clipboard.readText();
+    if (!text) {
+      alert("Sua área de transferência está vazia!");
+      return null;
+    }
+
+    return extrairDadosSmartPaste(text);
   };
 
   const handleSmartPaste = async () => {
     try {
-      const text = await navigator.clipboard.readText();
-      if (!text) {
-        alert("Sua área de transferência está vazia!");
-        return;
-      }
-
-      const dadosExtraidos = extrairDadosSmartPaste(text);
+      const dadosExtraidos = await lerDadosSmartPaste();
+      if (!dadosExtraidos) return;
       const tipoVooAtualizado = dadosExtraidos.tipoVoo || tipoVoo;
       const companhiaAtualizada = dadosExtraidos.companhia || companhia;
 
@@ -97,6 +110,59 @@ export default function Home() {
       if (dadosExtraidos.taxaEmbarque) setTaxaEmbarque(dadosExtraidos.taxaEmbarque);
 
       alert("✨ Voo extraído e colado com sucesso!");
+    } catch {
+      alert("Não foi possível colar. Verifique a permissão da área de transferência.");
+    }
+  };
+
+  const handleSmartPasteIda = async () => {
+    try {
+      const dadosExtraidos = await lerDadosSmartPaste();
+      if (!dadosExtraidos) return;
+
+      if (dadosExtraidos.companhia) setCompanhiaIda(dadosExtraidos.companhia);
+      if (dadosExtraidos.pontos) {
+        setPontosIda(dadosExtraidos.pontos);
+        setPontos(dadosExtraidos.pontos);
+      }
+      if (dadosExtraidos.taxaEmbarque) {
+        setTaxaIda(dadosExtraidos.taxaEmbarque);
+        setTaxaEmbarque(dadosExtraidos.taxaEmbarque);
+      }
+      if (dadosExtraidos.dataIda) setDataIda(dadosExtraidos.dataIda);
+      if (dadosExtraidos.horaSaidaIda) setHoraSaidaIda(dadosExtraidos.horaSaidaIda);
+      if (dadosExtraidos.horaChegadaIda) setHoraChegadaIda(dadosExtraidos.horaChegadaIda);
+      if (dadosExtraidos.paradasIda) setParadasIda(dadosExtraidos.paradasIda);
+      if (dadosExtraidos.origem) setOrigem(dadosExtraidos.origem);
+      if (dadosExtraidos.destino) setDestino(dadosExtraidos.destino);
+
+      alert("Dados da ida colados com sucesso!");
+    } catch {
+      alert("Não foi possível colar. Verifique a permissão da área de transferência.");
+    }
+  };
+
+  const handleSmartPasteVolta = async () => {
+    try {
+      const dadosExtraidos = await lerDadosSmartPaste();
+      if (!dadosExtraidos) return;
+
+      setTipoVoo('ida_volta');
+      if (dadosExtraidos.companhia) setCompanhiaVolta(dadosExtraidos.companhia);
+      if (dadosExtraidos.pontos) setPontosVolta(dadosExtraidos.pontos);
+      if (dadosExtraidos.taxaEmbarque) setTaxaVolta(dadosExtraidos.taxaEmbarque);
+      if (dadosExtraidos.dataVolta) setDataVolta(dadosExtraidos.dataVolta);
+      else if (dadosExtraidos.dataIda) setDataVolta(dadosExtraidos.dataIda);
+      if (dadosExtraidos.horaSaidaVolta) setHoraSaidaVolta(dadosExtraidos.horaSaidaVolta);
+      else if (dadosExtraidos.horaSaidaIda) setHoraSaidaVolta(dadosExtraidos.horaSaidaIda);
+      if (dadosExtraidos.horaChegadaVolta) setHoraChegadaVolta(dadosExtraidos.horaChegadaVolta);
+      else if (dadosExtraidos.horaChegadaIda) setHoraChegadaVolta(dadosExtraidos.horaChegadaIda);
+      if (dadosExtraidos.paradasVolta) setParadasVolta(dadosExtraidos.paradasVolta);
+      else if (dadosExtraidos.paradasIda) setParadasVolta(dadosExtraidos.paradasIda);
+      if (!origem && dadosExtraidos.origem) setOrigem(dadosExtraidos.origem);
+      if (!destino && dadosExtraidos.destino) setDestino(dadosExtraidos.destino);
+
+      alert("Dados da volta colados com sucesso!");
     } catch {
       alert("Não foi possível colar. Verifique a permissão da área de transferência.");
     }
@@ -140,8 +206,10 @@ export default function Home() {
       let camposPorTrecho: Partial<Pick<NovaCotacao, 'companhiaIda' | 'companhiaVolta' | 'pontosIda' | 'pontosVolta' | 'taxaIda' | 'taxaVolta' | 'valorIda' | 'valorVolta'>> = {};
 
       if (temCalculoPorTrecho) {
-        const qtdPontosIda = extrairNumero(pontosIda);
-        const taxaIdaCalculada = extrairNumero(taxaIda);
+        const pontosIdaParaCalculo = pontosIda.trim() || pontos;
+        const taxaIdaParaCalculo = taxaIda.trim() || taxaEmbarque;
+        const qtdPontosIda = extrairNumero(pontosIdaParaCalculo);
+        const taxaIdaCalculada = extrairNumero(taxaIdaParaCalculo);
         const qtdPontosVolta = extrairNumero(pontosVolta);
         const taxaVoltaCalculada = extrairNumero(taxaVolta);
 
@@ -267,6 +335,8 @@ export default function Home() {
           pontos={pontos} setPontos={setPontos}
           taxaEmbarque={taxaEmbarque} setTaxaEmbarque={setTaxaEmbarque}
           handleSmartPaste={handleSmartPaste}
+          handleSmartPasteIda={handleSmartPasteIda}
+          handleSmartPasteVolta={handleSmartPasteVolta}
           gerarCotacao={gerarCotacao}
         />
 
