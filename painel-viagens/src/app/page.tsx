@@ -5,7 +5,7 @@ import { toPng } from 'html-to-image';
 import Link from 'next/link';
 
 // IMPORTANDO NOSSAS CAIXINHAS DE LEGO
-import { calcularValorTotal, isHoraValida, normalizarDataParaCotacao } from '../utils/viagemUtils';
+import { calcularValorTotal, calcularValorTrecho, isHoraValida, normalizarDataParaCotacao } from '../utils/viagemUtils';
 import FormularioCotacao from '../components/FormularioCotacao';
 import BilhetePreview from '../components/BilhetePreview';
 import { useAuth } from '../context/AuthContext';
@@ -39,6 +39,12 @@ export default function Home() {
 
   const [pontos, setPontos] = useState('');
   const [taxaEmbarque, setTaxaEmbarque] = useState('');
+  const [pontosIda, setPontosIda] = useState('');
+  const [pontosVolta, setPontosVolta] = useState('');
+  const [taxaIda, setTaxaIda] = useState('');
+  const [taxaVolta, setTaxaVolta] = useState('');
+  const [valorIda, setValorIda] = useState<number | null>(null);
+  const [valorVolta, setValorVolta] = useState<number | null>(null);
   const [mensagemWhatsapp, setMensagemWhatsapp] = useState('');
 
   const ticketRef = useRef<HTMLDivElement>(null);
@@ -110,17 +116,71 @@ export default function Home() {
         alert("Atenção: Os horários do voo de VOLTA estão inválidos."); return;
       }
 
+      const extrairNumero = (valor: string) => {
+        const apenasNumeros = valor.replace(/\D/g, '');
+        return parseInt(apenasNumeros, 10);
+      };
+
+      const temCalculoPorTrecho = Boolean(
+        pontosIda.trim() ||
+        taxaIda.trim() ||
+        (tipoVoo === 'ida_volta' && (pontosVolta.trim() || taxaVolta.trim()))
+      );
+
       const apenasNumerosMilhas = pontos.replace(/\D/g, '');
       const apenasNumerosTaxa = taxaEmbarque.replace(/\D/g, '');
       
-      const qtdPontos = parseInt(apenasNumerosMilhas, 10);
-      const taxa = parseInt(apenasNumerosTaxa, 10);
+      let qtdPontos = parseInt(apenasNumerosMilhas, 10);
+      let taxa = parseInt(apenasNumerosTaxa, 10);
+      let valorIdaCalculado = valorIda;
+      let valorVoltaCalculado = valorVolta;
+      let valorTotal: number;
+      const companhiaTrechoIda = companhiaIda || companhia;
+      const companhiaTrechoVolta = companhiaVolta || companhiaIda || companhia;
+      let camposPorTrecho: Partial<Pick<NovaCotacao, 'companhiaIda' | 'companhiaVolta' | 'pontosIda' | 'pontosVolta' | 'taxaIda' | 'taxaVolta' | 'valorIda' | 'valorVolta'>> = {};
 
-      if (isNaN(qtdPontos) || isNaN(taxa)) {
-        alert("Por favor, preencha os Pontos e a Taxa corretamente."); return;
+      if (temCalculoPorTrecho) {
+        const qtdPontosIda = extrairNumero(pontosIda);
+        const taxaIdaCalculada = extrairNumero(taxaIda);
+        const qtdPontosVolta = extrairNumero(pontosVolta);
+        const taxaVoltaCalculada = extrairNumero(taxaVolta);
+
+        if (isNaN(qtdPontosIda) || isNaN(taxaIdaCalculada)) {
+          alert("Por favor, preencha os Pontos/Milhas e a Taxa da ida corretamente."); return;
+        }
+        if (tipoVoo === 'ida_volta' && (isNaN(qtdPontosVolta) || isNaN(taxaVoltaCalculada))) {
+          alert("Por favor, preencha os Pontos/Milhas e a Taxa da volta corretamente."); return;
+        }
+
+        qtdPontos = qtdPontosIda;
+        taxa = taxaIdaCalculada;
+        valorIdaCalculado = calcularValorTrecho(qtdPontosIda, taxaIdaCalculada, companhiaTrechoIda);
+        valorVoltaCalculado = tipoVoo === 'ida_volta'
+          ? calcularValorTrecho(qtdPontosVolta, taxaVoltaCalculada, companhiaTrechoVolta)
+          : null;
+        valorTotal = valorIdaCalculado + (valorVoltaCalculado ?? 0);
+        camposPorTrecho = {
+          companhiaIda: companhiaTrechoIda,
+          companhiaVolta: tipoVoo === 'ida_volta' ? companhiaTrechoVolta : null,
+          pontosIda: qtdPontosIda,
+          pontosVolta: tipoVoo === 'ida_volta' ? qtdPontosVolta : null,
+          taxaIda: taxaIdaCalculada,
+          taxaVolta: tipoVoo === 'ida_volta' ? taxaVoltaCalculada : null,
+          valorIda: valorIdaCalculado,
+          valorVolta: valorVoltaCalculado
+        };
+      } else {
+        if (isNaN(qtdPontos) || isNaN(taxa)) {
+          alert("Por favor, preencha os Pontos e a Taxa corretamente."); return;
+        }
+
+        valorIdaCalculado = null;
+        valorVoltaCalculado = null;
+        valorTotal = calcularValorTotal(qtdPontos, taxa, companhia);
       }
 
-      const valorTotal = calcularValorTotal(qtdPontos, taxa, companhia);
+      setValorIda(valorIdaCalculado);
+      setValorVolta(valorVoltaCalculado);
       
       const dataIdaFormatada = normalizarDataParaCotacao(dataIda);
       const dataVoltaFormatada = normalizarDataParaCotacao(dataVolta);
@@ -142,7 +202,8 @@ export default function Home() {
         paradasVolta,
         qtdPontos,
         taxaEmbarque: taxa,
-        valorTotal
+        valorTotal,
+        ...camposPorTrecho
       });
 
       await criarCotacao(novaCotacao);
@@ -199,6 +260,10 @@ export default function Home() {
           horaSaidaVolta={horaSaidaVolta} setHoraSaidaVolta={setHoraSaidaVolta}
           horaChegadaVolta={horaChegadaVolta} setHoraChegadaVolta={setHoraChegadaVolta}
           paradasVolta={paradasVolta} setParadasVolta={setParadasVolta}
+          pontosIda={pontosIda} setPontosIda={setPontosIda}
+          pontosVolta={pontosVolta} setPontosVolta={setPontosVolta}
+          taxaIda={taxaIda} setTaxaIda={setTaxaIda}
+          taxaVolta={taxaVolta} setTaxaVolta={setTaxaVolta}
           pontos={pontos} setPontos={setPontos}
           taxaEmbarque={taxaEmbarque} setTaxaEmbarque={setTaxaEmbarque}
           handleSmartPaste={handleSmartPaste}
