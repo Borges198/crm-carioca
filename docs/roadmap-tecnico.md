@@ -1,0 +1,104 @@
+# Roadmap Tecnico
+
+## Objetivo
+
+Organizar a evolucao do CRM Voo Singular em fases claras, mantendo uma base estavel para cotacao, historico, seguranca e melhorias futuras.
+
+## Fase 1: base estavel
+
+Status: base atual de referencia.
+
+Escopo:
+
+- manter aplicacao Next.js funcionando dentro de `painel-viagens`;
+- manter login com Firebase Authentication;
+- salvar cotacoes no Firestore;
+- listar historico de cotacoes;
+- listar clientes;
+- filtrar dados por `ownerId`;
+- manter documentacao tecnica em `docs`;
+- preservar comandos principais documentados em `docs/local-setup.md`.
+
+Criterio de estabilidade:
+
+- app roda em desenvolvimento;
+- lint e build passam quando houver alteracao de codigo;
+- cotacoes e clientes novos gravam `ownerId`;
+- documentos antigos sem `ownerId` nao sao migrados sem plano explicito.
+
+## Fase 2: cotacao por trecho
+
+Status: implementada como comportamento atual.
+
+Escopo:
+
+- permitir companhias diferentes para ida e volta;
+- permitir pontos/milhas e taxa separados por trecho;
+- calcular `valorIda`;
+- calcular `valorVolta`;
+- somar valores por trecho em `valorTotal`;
+- manter fallback para cotacao global quando o usuario nao usa campos por trecho;
+- manter BilhetePreview sem valores internos.
+
+Pontos de atencao:
+
+- conferir se historico exibe valores por trecho de forma coerente quando necessario;
+- garantir que edicoes futuras nao misturem campos globais e por trecho de forma ambigua;
+- preservar compatibilidade com cotacoes antigas.
+
+## Fase 3: Smart Paste Assistido
+
+Status: desejado.
+
+Escopo:
+
+- substituir ou complementar o Smart Paste direto por um fluxo assistido;
+- interpretar texto bruto em estrutura revisavel;
+- mostrar uma tela/modal de conferencia antes de preencher campos;
+- permitir aplicar dados globalmente, na ida ou na volta;
+- destacar campos com baixa confianca ou ausentes;
+- preservar o Smart Paste global enquanto o assistido nao estiver pronto.
+
+Criterio de aceite:
+
+- nenhum dado extraido automaticamente deve ser aplicado sem confirmacao humana no fluxo assistido;
+- usuario consegue revisar datas, horarios, aeroportos, companhia, paradas, milhas e taxas;
+- fluxo reduz erros silenciosos sem atrasar demais a operacao.
+
+## Fase 4: seguranca e producao
+
+Status: proposta documentada, ainda exige decisao operacional.
+
+Escopo:
+
+- revisar `docs/firestore-security-proposal.md`;
+- validar regras em ambiente seguro antes de producao;
+- decidir destino de documentos antigos sem `ownerId`;
+- criar plano de migracao, arquivamento ou aceite de inacessibilidade;
+- criar indices compostos exigidos por consultas com `ownerId` e ordenacao;
+- validar testes com mais de um usuario autenticado;
+- garantir que credenciais e arquivos sensiveis nao sejam commitados.
+
+Pontos de atencao:
+
+- `ownerId` e a fronteira atual de isolamento;
+- `isAdmin` client-side nao deve ser tratado como seguranca real;
+- regras Firestore nao devem ser aplicadas sem plano para documentos antigos.
+
+## Fase 5: melhorias futuras
+
+Ideias candidatas:
+
+- historico com filtros mais avancados;
+- busca por cliente, rota, periodo, companhia e status;
+- edicao completa de cotacoes salvas;
+- tela de detalhes da cotacao;
+- melhoria da mensagem de WhatsApp com formato comercial revisado;
+- modelo de proposta exportavel;
+- painel de metricas de conversao;
+- controle de status com funil operacional;
+- migracao planejada de documentos antigos;
+- testes automatizados para calculo, Smart Paste e mapeamento de cotacao;
+- documentacao de deploy e operacao em producao.
+
+Qualquer melhoria futura deve preservar as regras de seguranca, isolamento por usuario e nao exposicao de valores internos no BilhetePreview.
