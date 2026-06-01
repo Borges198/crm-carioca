@@ -1,0 +1,22 @@
+{
+  "source": "azul",
+  "scenario": "ida",
+  "expectedCandidates": [
+    {
+      "trecho": "ida",
+      "raw": {
+        "pontos": 28900,
+        "taxa": 71.84
+      },
+      "rounded": {
+        "pontos": 29,
+        "taxa": 72
+      }
+    }
+  ],
+  "expectedSmartPaste": {
+    "tipoVoo": "ida",
+    "companhia": "Azul"
+  },
+  "notes": []
+}

@@ -1,0 +1,42 @@
+{
+  "source": "smiles",
+  "scenario": "ida-volta",
+  "expectedCandidates": [
+    {
+      "trecho": "ida",
+      "raw": {
+        "pontos": 8500
+      },
+      "rounded": {
+        "pontos": 9
+      }
+    },
+    {
+      "trecho": "volta",
+      "raw": {
+        "pontos": 7400
+      },
+      "rounded": {
+        "pontos": 8
+      }
+    },
+    {
+      "trecho": "total",
+      "raw": {
+        "pontos": 15900,
+        "taxa": 66.05
+      },
+      "rounded": {
+        "pontos": 16,
+        "taxa": 67
+      }
+    }
+  ],
+  "expectedSmartPaste": {
+    "tipoVoo": "ida_volta",
+    "companhia": "GOL"
+  },
+  "notes": [
+    "Nesta fase, nao dividir taxa total automaticamente entre ida e volta."
+  ]
+}

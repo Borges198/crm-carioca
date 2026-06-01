@@ -1,0 +1,22 @@
+{
+  "source": "smiles",
+  "scenario": "ida",
+  "expectedCandidates": [
+    {
+      "trecho": "ida",
+      "raw": {
+        "pontos": 40300,
+        "taxa": 62.14
+      },
+      "rounded": {
+        "pontos": 41,
+        "taxa": 63
+      }
+    }
+  ],
+  "expectedSmartPaste": {
+    "tipoVoo": "ida",
+    "companhia": "GOL"
+  },
+  "notes": []
+}

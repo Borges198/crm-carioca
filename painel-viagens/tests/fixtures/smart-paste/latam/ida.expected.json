@@ -1,0 +1,22 @@
+{
+  "source": "latam",
+  "scenario": "ida",
+  "expectedCandidates": [
+    {
+      "trecho": "ida",
+      "raw": {
+        "pontos": 28096,
+        "taxa": 33.64
+      },
+      "rounded": {
+        "pontos": 29,
+        "taxa": 34
+      }
+    }
+  ],
+  "expectedSmartPaste": {
+    "tipoVoo": "ida",
+    "companhia": "Latam"
+  },
+  "notes": []
+}

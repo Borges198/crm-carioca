@@ -1,0 +1,21 @@
+{
+  "source": "smiles",
+  "scenario": "volta",
+  "expectedCandidates": [
+    {
+      "trecho": "volta",
+      "raw": {
+        "pontos": 41300,
+        "taxa": 52.04
+      },
+      "rounded": {
+        "pontos": 42,
+        "taxa": 53
+      }
+    }
+  ],
+  "expectedSmartPaste": {
+    "companhia": "GOL"
+  },
+  "notes": []
+}
