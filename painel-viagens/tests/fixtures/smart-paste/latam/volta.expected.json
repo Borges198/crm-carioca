@@ -1,0 +1,21 @@
+{
+  "source": "latam",
+  "scenario": "volta",
+  "expectedCandidates": [
+    {
+      "trecho": "volta",
+      "raw": {
+        "pontos": 23905,
+        "taxa": 52.04
+      },
+      "rounded": {
+        "pontos": 24,
+        "taxa": 53
+      }
+    }
+  ],
+  "expectedSmartPaste": {
+    "companhia": "Latam"
+  },
+  "notes": []
+}

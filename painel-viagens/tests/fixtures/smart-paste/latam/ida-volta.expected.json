@@ -1,0 +1,44 @@
+{
+  "source": "latam",
+  "scenario": "ida-volta",
+  "expectedCandidates": [
+    {
+      "trecho": "ida",
+      "raw": {
+        "pontos": 28096,
+        "taxa": 33.64
+      },
+      "rounded": {
+        "pontos": 29,
+        "taxa": 34
+      }
+    },
+    {
+      "trecho": "volta",
+      "raw": {
+        "pontos": 38885,
+        "taxa": 52.04
+      },
+      "rounded": {
+        "pontos": 39,
+        "taxa": 53
+      }
+    },
+    {
+      "trecho": "total",
+      "raw": {
+        "pontos": 66981,
+        "taxa": 85.68
+      },
+      "rounded": {
+        "pontos": 67,
+        "taxa": 86
+      }
+    }
+  ],
+  "expectedSmartPaste": {
+    "tipoVoo": "ida_volta",
+    "companhia": "Latam"
+  },
+  "notes": []
+}

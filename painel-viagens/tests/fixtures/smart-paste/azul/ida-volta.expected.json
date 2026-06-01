@@ -1,0 +1,33 @@
+{
+  "source": "azul",
+  "scenario": "ida-volta",
+  "expectedCandidates": [
+    {
+      "trecho": "ida",
+      "raw": {
+        "pontos": 43120,
+        "taxa": 71.84
+      },
+      "rounded": {
+        "pontos": 44,
+        "taxa": 72
+      }
+    },
+    {
+      "trecho": "volta",
+      "raw": {
+        "pontos": 37240,
+        "taxa": 91.94
+      },
+      "rounded": {
+        "pontos": 38,
+        "taxa": 92
+      }
+    }
+  ],
+  "expectedSmartPaste": {
+    "tipoVoo": "ida_volta",
+    "companhia": "Azul"
+  },
+  "notes": []
+}
