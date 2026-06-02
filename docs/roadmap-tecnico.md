@@ -118,7 +118,7 @@ Qualquer melhoria futura deve preservar as regras de seguranca, isolamento por u
 
 ## Fase 6: Leads, Historico Comercial e Clientes Reais
 
-Status: primeira implementacao de Leads concluida; Clientes Reais ainda e etapa futura.
+Status: Leads e conversao manual para Clientes Reais implementados em MVP.
 
 Decisao central:
 
@@ -143,6 +143,17 @@ Ja implementado:
 - `/leads` como visao interna baseada em `cotacoes`, sem colecao nova;
 - status abertos aparecem por padrao;
 - `fechado` e `perdido` nao aparecem por padrao.
+- acao manual `Adicionar aos clientes` no `/historico` para cotacoes com `leadStatus = "fechado"`;
+- criacao de cliente com confirmacao do usuario;
+- deduplicacao inicial basica por nome normalizado;
+- preservacao de `ownerId` no cliente criado;
+- criacao sem alterar a cotacao original.
+
+Limitacoes conhecidas do MVP:
+
+- cliente criado a partir de cotacao nao recebe telefone porque a cotacao ainda nao possui esse campo;
+- ainda nao existe vinculo formal `cotacaoOrigemId` entre cliente e cotacao;
+- deduplicacao ainda e basica e nao usa telefone ou e-mail.
 
 Status comerciais sugeridos:
 
@@ -178,7 +189,7 @@ Regra para `/clientes`:
 - representar compradores reais;
 - permitir cadastro manual;
 - permitir criacao a partir de cotacao marcada como `fechado`;
-- preferir inicialmente botao ou acao `Adicionar aos clientes` apos o fechamento, em vez de criacao automatica.
+- usar acao manual `Adicionar aos clientes` apos o fechamento, em vez de criacao automatica.
 
 Plano em fases pequenas:
 
@@ -186,5 +197,5 @@ Plano em fases pequenas:
 - adicionar campos opcionais em cotacoes mantendo compatibilidade com documentos antigos: concluido em primeira versao;
 - permitir status comercial no `/historico`: concluido em primeira versao;
 - criar `/leads` como visao de oportunidades abertas: concluido em primeira versao;
-- adicionar fluxo manual para converter cotacao fechada em cliente real;
+- adicionar fluxo manual para converter cotacao fechada em cliente real: concluido em primeira versao;
 - estudar deduplicacao antes de qualquer automacao.

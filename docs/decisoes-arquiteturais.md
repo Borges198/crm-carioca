@@ -155,7 +155,19 @@ Em `/leads`, a visao principal deve mostrar apenas oportunidades ainda abertas: 
 
 Em `/clientes`, a criacao pode acontecer manualmente ou a partir de uma cotacao marcada como `fechado`.
 
-Inicialmente, a conversao de cotacao fechada para cliente deve ser manual, por uma acao como `Adicionar aos clientes`. A criacao automatica deve ser evitada enquanto nao houver regra confiavel de deduplicacao, porque a mesma pessoa pode aparecer com variacoes de nome, telefone ou e-mail.
+A conversao de cotacao fechada para cliente deve ser manual, por uma acao como `Adicionar aos clientes`. A criacao automatica deve ser evitada enquanto nao houver regra confiavel de deduplicacao, porque a mesma pessoa pode aparecer com variacoes de nome, telefone ou e-mail.
+
+Primeira versao implementada:
+
+- a acao `Adicionar aos clientes` aparece no `/historico` somente para cotacoes com `leadStatus = "fechado"`;
+- a criacao do cliente exige confirmacao do usuario;
+- a deduplicacao inicial e basica, por nome normalizado;
+- o cliente criado preserva `ownerId` do usuario autenticado;
+- a acao nao altera a cotacao original;
+- o cliente criado nao recebe telefone porque a cotacao ainda nao possui esse campo;
+- ainda nao existe vinculo formal `cotacaoOrigemId` entre cliente e cotacao.
+
+Assim, `/historico` segue como memoria das cotacoes e ponto de acao comercial, `/leads` segue como painel de oportunidades comerciais abertas e `/clientes` segue como carteira de compradores reais.
 
 Plano de implementacao:
 
