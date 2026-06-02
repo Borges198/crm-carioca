@@ -24,6 +24,14 @@ export const PRODUTOS_OFERTADOS_OPTIONS = [
 export type LeadStatus = typeof LEAD_STATUS_OPTIONS[number]['value'];
 export type ProdutoOfertado = typeof PRODUTOS_OFERTADOS_OPTIONS[number]['value'];
 
+export const LEAD_STATUS_ABERTOS: LeadStatus[] = [
+  'novo',
+  'em_monitoramento',
+  'aguardando_cliente',
+  'orcamento_enviado',
+  'negociacao',
+];
+
 const leadStatusLabels = new Map<string, string>(
   LEAD_STATUS_OPTIONS.map((option) => [option.value, option.label])
 );
@@ -35,6 +43,10 @@ const produtoOfertadoLabels = new Map<string, string>(
 export function formatarLeadStatus(status?: string | null) {
   if (!status) return 'Nao informado';
   return leadStatusLabels.get(status) ?? status;
+}
+
+export function isLeadStatusAberto(status?: string | null) {
+  return LEAD_STATUS_ABERTOS.includes(status as LeadStatus);
 }
 
 export function formatarProdutoOfertado(produto: string) {
