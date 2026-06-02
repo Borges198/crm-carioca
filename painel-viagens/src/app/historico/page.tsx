@@ -211,6 +211,9 @@ function HistoricoContent() {
             Gestão de Cotações 📋
           </h1>
           <div className="flex gap-4">
+            <Link href="/leads" className="bg-white text-slate-700 px-6 py-2 rounded-lg hover:bg-slate-100 border font-bold shadow-sm">
+              Leads Comerciais
+            </Link>
             <Link href="/clientes" className="bg-white text-slate-700 px-6 py-2 rounded-lg hover:bg-slate-100 border font-bold shadow-sm">
               Carteira de Clientes 💼
             </Link>
