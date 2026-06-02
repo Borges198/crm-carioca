@@ -15,6 +15,7 @@ import { extrairDadosSmartPaste } from '../utils/smartPasteUtils';
 import { montarNovaCotacao } from '../utils/cotacaoMapper';
 import { gerarMensagemWhatsApp } from '../utils/whatsappMessageUtils';
 import { extrairCandidatosSmartPaste, type SmartPasteCandidate, type SmartPasteCandidatesResult } from '../lib/smartPasteCandidatesUtils';
+import type { LeadStatus, ProdutoOfertado } from '../lib/leadUtils';
 
 interface SmartPasteConferencia extends SmartPasteCandidatesResult {
   textoOrigemPreview: string;
@@ -52,6 +53,9 @@ export default function Home() {
   const [valorVolta, setValorVolta] = useState<number | null>(null);
   const [mensagemWhatsapp, setMensagemWhatsapp] = useState('');
   const [smartPasteConferencia, setSmartPasteConferencia] = useState<SmartPasteConferencia | null>(null);
+  const [produtosOfertados, setProdutosOfertados] = useState<ProdutoOfertado[]>([]);
+  const [observacao, setObservacao] = useState('');
+  const [leadStatus, setLeadStatus] = useState<LeadStatus>('novo');
 
   const ticketRef = useRef<HTMLDivElement>(null);
 
@@ -307,6 +311,9 @@ export default function Home() {
         qtdPontos,
         taxaEmbarque: taxa,
         valorTotal,
+        produtosOfertados,
+        observacao,
+        leadStatus,
         ...camposPorTrecho
       });
 
@@ -370,6 +377,9 @@ export default function Home() {
           taxaVolta={taxaVolta} setTaxaVolta={setTaxaVolta}
           pontos={pontos} setPontos={setPontos}
           taxaEmbarque={taxaEmbarque} setTaxaEmbarque={setTaxaEmbarque}
+          produtosOfertados={produtosOfertados} setProdutosOfertados={setProdutosOfertados}
+          observacao={observacao} setObservacao={setObservacao}
+          leadStatus={leadStatus} setLeadStatus={setLeadStatus}
           handleSmartPaste={handleSmartPaste}
           handleSmartPasteIda={handleSmartPasteIda}
           handleSmartPasteVolta={handleSmartPasteVolta}
