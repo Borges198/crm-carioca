@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { listarNomesClientesDasCotacoes } from '../services/cotacoesService';
 import type { Companhia } from '../types';
+import type { SmartPasteCandidate, SmartPasteCandidatesResult } from '../lib/smartPasteCandidatesUtils';
 
 // Função auxiliar para garantir que a máscara de hora funcione perfeitamente
 const maskHora = (value: string) => {
@@ -41,7 +42,15 @@ interface FormularioCotacaoProps {
   handleSmartPaste: () => void;
   handleSmartPasteIda: () => void;
   handleSmartPasteVolta: () => void;
+  smartPasteConferencia?: (SmartPasteCandidatesResult & { textoOrigemPreview?: string }) | null;
+  onAplicarCandidatoSmartPaste: (candidate: SmartPasteCandidate) => void;
   gerarCotacao: () => void;
+}
+
+function formatarTrecho(trecho: SmartPasteCandidate['trecho']) {
+  if (trecho === 'ida') return 'Ida';
+  if (trecho === 'volta') return 'Volta';
+  return 'Total';
 }
 
 export default function FormularioCotacao({
@@ -52,7 +61,7 @@ export default function FormularioCotacao({
   dataVolta, setDataVolta, horaSaidaVolta, setHoraSaidaVolta, horaChegadaVolta, setHoraChegadaVolta, paradasVolta, setParadasVolta,
   pontosIda, setPontosIda, pontosVolta, setPontosVolta, taxaIda, setTaxaIda, taxaVolta, setTaxaVolta,
   pontos, setPontos, taxaEmbarque, setTaxaEmbarque,
-  handleSmartPaste, handleSmartPasteIda, handleSmartPasteVolta, gerarCotacao
+  handleSmartPaste, handleSmartPasteIda, handleSmartPasteVolta, smartPasteConferencia, onAplicarCandidatoSmartPaste, gerarCotacao
 }: FormularioCotacaoProps) {
   
   // 🧠 ESTADOS DA MEMÓRIA DE CLIENTES
@@ -103,6 +112,56 @@ export default function FormularioCotacao({
       </div>
 
       <div className="space-y-4">
+        {smartPasteConferencia && smartPasteConferencia.candidates.length > 0 && (
+          <section className="rounded-lg border border-indigo-200 bg-indigo-50 p-3">
+            <div className="mb-2 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-indigo-900">Conferência Smart Paste</p>
+                <p className="mt-1 text-xs font-semibold text-indigo-800">{smartPasteConferencia.companhia || 'Companhia não identificada'}</p>
+                <p className="mt-1 text-[11px] font-medium text-indigo-900/70">Sugestões para aplicar manualmente.</p>
+              </div>
+              <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black uppercase text-indigo-700">
+                Revisar
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              {smartPasteConferencia.candidates.map((candidate, index) => (
+                <div key={`${candidate.trecho}-${index}`} className="rounded-md border border-indigo-100 bg-white p-2 text-xs">
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase text-slate-400">Trecho</p>
+                      <p className="mt-0.5 font-black text-slate-800">{formatarTrecho(candidate.trecho)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase text-slate-400">Pontos</p>
+                      <p className="mt-0.5 font-black text-slate-800">{candidate.rounded.pontos ?? '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase text-slate-400">Taxa</p>
+                      <p className="mt-0.5 font-black text-slate-800">{candidate.rounded.taxa ?? '-'}</p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => onAplicarCandidatoSmartPaste(candidate)}
+                    disabled={!candidate.rounded.pontos && !candidate.rounded.taxa}
+                    className="mt-2 w-full rounded-md border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-[11px] font-black uppercase text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Aplicar este candidato
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {smartPasteConferencia.textoOrigemPreview && (
+              <p className="mt-2 line-clamp-2 text-[11px] font-medium text-indigo-900/70">
+                {smartPasteConferencia.textoOrigemPreview}
+              </p>
+            )}
+          </section>
+        )}
         
         {/* CAMPO DE CLIENTE COM AUTO-COMPLETAR */}
         <div className="relative">
