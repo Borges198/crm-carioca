@@ -8,7 +8,16 @@ Documentar a proxima evolucao do CRM Voo Singular para separar com clareza tres 
 - `/leads`: oportunidades comerciais em acompanhamento;
 - `/clientes`: carteira de compradores reais.
 
-Esta etapa e apenas arquitetural e nao altera codigo da aplicacao.
+Primeira implementacao inicial ja realizada:
+
+- campos comerciais em cotacoes: `produtosOfertados`, `observacao` e `leadStatus`;
+- edicao comercial no `/historico`;
+- primeira versao de `/leads`;
+- `/leads` como visao interna baseada em `cotacoes`, sem colecao nova;
+- status abertos aparecem por padrao em `/leads`;
+- `fechado` e `perdido` nao aparecem por padrao em `/leads`.
+
+`/clientes` segue como etapa futura para compradores reais.
 
 ## Decisao de produto
 
@@ -48,16 +57,21 @@ Valores sugeridos para `produtosOfertados`:
 - `visto`;
 - `chip_internacional`.
 
-## Campos futuros em cotacoes
+## Campos comerciais em cotacoes
 
-Campos planejados para evoluir a colecao de cotacoes sem criar uma colecao paralela de leads neste primeiro momento:
+Campos implementados para evoluir a colecao de cotacoes sem criar uma colecao paralela de leads neste primeiro momento:
 
 - `produtosOfertados?: string[]`;
 - `observacao?: string`;
 - `leadStatus?: string`;
+
+Campo ainda planejado para evolucao posterior:
+
 - `leadAtualizadoEm?: Timestamp`.
 
 ## Regra para `/leads`
+
+Status: primeira versao implementada.
 
 Mostrar como oportunidades abertas:
 
@@ -70,6 +84,8 @@ Mostrar como oportunidades abertas:
 Nao tratar `fechado` como lead aberto.
 
 `perdido` pode continuar acessivel via filtro, mas nao deve aparecer como prioridade principal da tela.
+
+`/leads` e uma visao comercial interna baseada na colecao `cotacoes`. Nao existe colecao nova de leads nesta etapa.
 
 ## Regra para `/clientes`
 
@@ -122,6 +138,8 @@ Mitigacoes iniciais:
 
 ### Fase 2: modelo de dados minimo
 
+Status: implementada em primeira versao.
+
 - adicionar campos opcionais em novas cotacoes;
 - preservar compatibilidade com cotacoes antigas sem esses campos;
 - manter `ownerId` como fronteira de isolamento;
@@ -129,11 +147,16 @@ Mitigacoes iniciais:
 
 ### Fase 3: status no historico
 
+Status: implementada em primeira versao.
+
 - permitir marcar cotacao com status comercial;
-- atualizar `leadAtualizadoEm` ao alterar status;
+- permitir editar `leadStatus`, `produtosOfertados` e `observacao` no `/historico`;
+- atualizar `leadAtualizadoEm` ao alterar status em evolucao posterior;
 - garantir que `/historico` continue listando cotacoes como registro completo.
 
 ### Fase 4: tela `/leads`
+
+Status: implementada em primeira versao.
 
 - criar visao filtrada para oportunidades abertas;
 - priorizar status em andamento;
@@ -141,6 +164,8 @@ Mitigacoes iniciais:
 - excluir `fechado` da visao principal de leads abertos.
 
 ### Fase 5: conversao para cliente real
+
+Status: futura.
 
 - apos marcar cotacao como `fechado`, exibir acao `Adicionar aos clientes`;
 - conferir possivel cliente existente antes da criacao;
