@@ -56,4 +56,61 @@ describe('extrairCandidatosSmartPaste', () => {
     expect(result.companhia).toBe(expected.expectedSmartPaste.companhia);
     expect(result.candidates).toEqual(expected.expectedCandidates);
   });
+
+  it('retorna lista vazia quando o texto nao tem candidatos reconhecidos', () => {
+    const result = extrairCandidatosSmartPaste('Texto livre sem companhia, pontos, milhas ou taxa.');
+
+    expect(result.companhia).toBeUndefined();
+    expect(result.candidates).toEqual([]);
+  });
+
+  it('arredonda para cima pontos e taxa em oferta compacta da Azul', () => {
+    const result = extrairCandidatosSmartPaste('Azul\nOferta selecionada\n28.001pontos+R$71,01');
+
+    expect(result.candidates).toEqual([
+      {
+        trecho: 'ida',
+        raw: {
+          pontos: 28001,
+          taxa: 71.01,
+        },
+        rounded: {
+          pontos: 29,
+          taxa: 72,
+        },
+      },
+    ]);
+  });
+
+  it('mantem candidatos incompletos de Smiles ida-volta sem dividir taxa automaticamente', () => {
+    const result = extrairCandidatosSmartPaste(`
+      Passagem de ida
+      GOL Linhas Aereas
+      8.500 milhas por viajante
+      Passagem de volta
+      GOL Linhas Aereas
+      7.400 milhas por viajante
+    `);
+
+    expect(result.candidates).toEqual([
+      {
+        trecho: 'ida',
+        raw: {
+          pontos: 8500,
+        },
+        rounded: {
+          pontos: 9,
+        },
+      },
+      {
+        trecho: 'volta',
+        raw: {
+          pontos: 7400,
+        },
+        rounded: {
+          pontos: 8,
+        },
+      },
+    ]);
+  });
 });

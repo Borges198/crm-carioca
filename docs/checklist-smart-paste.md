@@ -47,6 +47,15 @@ painel-viagens/tests/fixtures/smart-paste/
 - Confirmar que candidato incompleto aplica apenas o campo existente.
 - Confirmar que nenhum candidato e aplicado automaticamente ao colar texto.
 
+## Checklist de estabilizacao automatizada
+
+- Confirmar que fixtures reais de Azul, Latam e Smiles continuam verdes.
+- Confirmar que texto livre sem companhia, pontos, milhas ou taxa retorna lista vazia.
+- Confirmar arredondamento para cima de pontos/milhas.
+- Confirmar arredondamento para cima de taxa.
+- Confirmar que candidato incompleto nao quebra a extracao.
+- Confirmar que taxa total de Smiles ida-volta nao e dividida automaticamente entre ida e volta.
+
 ## Comandos de validacao
 
 Depois de qualquer ajuste de codigo relacionado ao fluxo:
