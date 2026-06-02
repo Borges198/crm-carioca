@@ -16,8 +16,11 @@ Primeira implementacao inicial ja realizada:
 - `/leads` como visao interna baseada em `cotacoes`, sem colecao nova;
 - status abertos aparecem por padrao em `/leads`;
 - `fechado` e `perdido` nao aparecem por padrao em `/leads`.
+- acao manual `Adicionar aos clientes` no `/historico` para cotacoes com `leadStatus = "fechado"`;
+- criacao de cliente com confirmacao humana, preservando `ownerId`;
+- deduplicacao inicial basica por nome normalizado.
 
-`/clientes` segue como etapa futura para compradores reais.
+`/clientes` segue como carteira de compradores reais.
 
 ## Decisao de produto
 
@@ -96,18 +99,27 @@ Cliente pode ser:
 - cadastrado manualmente; ou
 - criado a partir de uma cotacao marcada como `fechado`.
 
-Inicialmente, preferir uma acao explicita como `Adicionar aos clientes` depois que a cotacao for marcada como `fechado`. Isso reduz risco de duplicidade e evita criar cliente automaticamente para uma pessoa que ja existe na carteira.
+A primeira versao da acao explicita `Adicionar aos clientes` ja foi implementada no `/historico` depois que a cotacao e marcada como `fechado`. Isso reduz risco de duplicidade e evita criar cliente automaticamente para uma pessoa que ja existe na carteira.
 
 ## Como cotacao fechada vira cliente
 
-Fluxo planejado:
+Fluxo implementado em primeira versao:
 
 1. Usuario acompanha a oportunidade em `/leads` ou consulta a cotacao em `/historico`.
 2. Usuario altera o status comercial da cotacao para `fechado`.
 3. A cotacao deixa de aparecer como lead aberto.
-4. A interface oferece uma acao explicita para adicionar a pessoa aos clientes.
-5. Antes de criar o cliente, o usuario confere se ja existe cadastro equivalente.
-6. Ao confirmar, a carteira de `/clientes` passa a representar aquela pessoa como comprador real.
+4. O `/historico` oferece a acao explicita `Adicionar aos clientes`.
+5. O usuario confirma manualmente a criacao.
+6. Antes de criar o cliente, o sistema verifica duplicidade basica por nome normalizado.
+7. Ao confirmar e nao haver duplicidade, a carteira de `/clientes` passa a representar aquela pessoa como comprador real.
+
+Detalhes da primeira versao:
+
+- a acao aparece somente para cotacoes com `leadStatus = "fechado"`;
+- o cliente criado preserva `ownerId` do usuario autenticado;
+- a acao nao altera a cotacao original;
+- o cliente criado nao recebe telefone porque a cotacao ainda nao possui esse campo;
+- ainda nao existe vinculo formal `cotacaoOrigemId` entre cliente e cotacao.
 
 ## Riscos de duplicidade
 
@@ -123,7 +135,8 @@ Mitigacoes iniciais:
 
 - usar acao manual `Adicionar aos clientes`;
 - mostrar dados principais da cotacao antes da criacao;
-- buscar cliente existente por telefone, e-mail ou nome quando esses dados existirem;
+- buscar cliente existente por nome normalizado nesta primeira versao;
+- evoluir para telefone ou e-mail quando esses dados existirem na cotacao;
 - manter a cotacao original no `/historico`;
 - adiar automacoes ate existir criterio confiavel de deduplicacao.
 
@@ -165,16 +178,17 @@ Status: implementada em primeira versao.
 
 ### Fase 5: conversao para cliente real
 
-Status: futura.
+Status: implementada em primeira versao.
 
 - apos marcar cotacao como `fechado`, exibir acao `Adicionar aos clientes`;
-- conferir possivel cliente existente antes da criacao;
+- conferir possivel cliente existente antes da criacao por nome normalizado;
 - criar cliente apenas com confirmacao humana;
 - preservar vinculo conceitual com a cotacao de origem.
 
 ### Fase 6: melhorias posteriores
 
 - estudar deduplicacao por telefone, e-mail e nome normalizado;
-- avaliar vinculo formal entre cliente e cotacoes fechadas;
+- avaliar vinculo formal `cotacaoOrigemId` entre cliente e cotacoes fechadas;
+- avaliar captura de telefone no fluxo de cotacao;
 - adicionar metricas de conversao;
 - revisar filtros comerciais por produto ofertado e status.
