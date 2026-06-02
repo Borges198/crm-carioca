@@ -48,7 +48,7 @@ Pontos de atencao:
 
 ## Fase 3: Smart Paste Assistido
 
-Status: primeira camada implementada.
+Status: implementada e validada em primeira versao.
 
 Escopo:
 
@@ -72,6 +72,8 @@ Criterio de aceite:
 Proxima evolucao:
 
 - validar manualmente o fluxo visual usando `docs/checklist-smart-paste.md`;
+- manter validacao automatizada do parser de candidatos com fixtures reais;
+- cobrir casos de estabilizacao como texto sem candidatos, arredondamento para cima e candidatos incompletos;
 - estudar aplicacao assistida de outros campos apenas depois de nova decisao arquitetural;
 - manter testes de caracterizacao com fixtures reais das companhias.
 
