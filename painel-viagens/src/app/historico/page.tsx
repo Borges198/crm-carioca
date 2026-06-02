@@ -7,7 +7,14 @@ import AuthGuard from '../../components/AuthGuard';
 import { useAuth } from '../../context/AuthContext';
 import { atualizarCotacao, excluirCotacao as excluirCotacaoFirestore, listarCotacoesDoUsuario } from '../../services/cotacoesService';
 import type { Cotacao } from '../../types';
-import { formatarLeadStatus, formatarProdutoOfertado } from '../../lib/leadUtils';
+import {
+  LEAD_STATUS_OPTIONS,
+  PRODUTOS_OFERTADOS_OPTIONS,
+  formatarLeadStatus,
+  formatarProdutoOfertado,
+  type LeadStatus,
+  type ProdutoOfertado,
+} from '../../lib/leadUtils';
 
 export default function Historico() {
   return (
@@ -31,6 +38,11 @@ function HistoricoContent() {
   const [editCompanhia, setEditCompanhia] = useState('');
   const [editValorTotal, setEditValorTotal] = useState<number>(0);
   const [editDataIda, setEditDataIda] = useState('');
+  const [modalComercialAberto, setModalComercialAberto] = useState(false);
+  const [cotacaoComercialEmEdicao, setCotacaoComercialEmEdicao] = useState<Cotacao | null>(null);
+  const [editLeadStatus, setEditLeadStatus] = useState<LeadStatus>('novo');
+  const [editProdutosOfertados, setEditProdutosOfertados] = useState<ProdutoOfertado[]>([]);
+  const [editObservacao, setEditObservacao] = useState('');
 
   useEffect(() => {
     if (!user) {
@@ -88,6 +100,58 @@ function HistoricoContent() {
     } catch (error) {
       console.error("Erro ao salvar edição da cotação:", error);
       alert("Erro ao salvar modificações.");
+    }
+  };
+
+  const normalizarLeadStatus = (status?: string): LeadStatus => {
+    const statusEncontrado = LEAD_STATUS_OPTIONS.find((option) => option.value === status);
+    return statusEncontrado?.value ?? 'novo';
+  };
+
+  const normalizarProdutosOfertados = (produtos?: string[]): ProdutoOfertado[] => (
+    (produtos ?? []).filter((produto): produto is ProdutoOfertado =>
+      PRODUTOS_OFERTADOS_OPTIONS.some((option) => option.value === produto)
+    )
+  );
+
+  const abrirModalComercial = (item: Cotacao) => {
+    setCotacaoComercialEmEdicao(item);
+    setEditLeadStatus(normalizarLeadStatus(item.leadStatus));
+    setEditProdutosOfertados(normalizarProdutosOfertados(item.produtosOfertados));
+    setEditObservacao(item.observacao ?? '');
+    setModalComercialAberto(true);
+  };
+
+  const alternarProdutoOfertado = (produto: ProdutoOfertado) => {
+    setEditProdutosOfertados((produtosAtuais) => (
+      produtosAtuais.includes(produto)
+        ? produtosAtuais.filter((item) => item !== produto)
+        : [...produtosAtuais, produto]
+    ));
+  };
+
+  const salvarEdicaoComercial = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cotacaoComercialEmEdicao) return;
+
+    const dadosComerciais = {
+      leadStatus: editLeadStatus,
+      produtosOfertados: editProdutosOfertados,
+      observacao: editObservacao.trim(),
+    };
+
+    try {
+      await atualizarCotacao(cotacaoComercialEmEdicao.id, dadosComerciais);
+
+      setCotacoes(prev => prev.map(item =>
+        item.id === cotacaoComercialEmEdicao.id ? { ...item, ...dadosComerciais } : item
+      ));
+
+      setModalComercialAberto(false);
+      setCotacaoComercialEmEdicao(null);
+    } catch (error) {
+      console.error("Erro ao salvar dados comerciais:", error);
+      alert("Erro ao salvar dados comerciais.");
     }
   };
 
@@ -238,6 +302,13 @@ function HistoricoContent() {
                           {item.observacao}
                         </p>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => abrirModalComercial(item)}
+                        className="mt-2 rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-black uppercase text-slate-600 transition hover:bg-slate-100"
+                      >
+                        Editar comercial
+                      </button>
                     </td>
                     <td className="px-6 py-4 text-gray-400 text-[11px] font-medium">
                       {formatarData(item.dataRegistro)}
@@ -307,6 +378,64 @@ function HistoricoContent() {
               <div className="flex justify-end gap-3 mt-4">
                 <button type="button" onClick={() => setModalEditAberto(false)} className="px-4 py-2 text-slate-500 font-semibold hover:bg-slate-100 rounded-lg">Cancelar</button>
                 <button type="submit" className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-md">Salvar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {modalComercialAberto && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-lg">
+            <h2 className="text-xl font-bold text-slate-800 mb-1">Editar comercial</h2>
+            <p className="mb-5 text-sm font-medium text-slate-500">
+              {cotacaoComercialEmEdicao?.cliente}
+            </p>
+
+            <form onSubmit={salvarEdicaoComercial} className="flex flex-col gap-4">
+              <label className="block">
+                <span className="text-sm font-semibold text-slate-600">Status comercial</span>
+                <select
+                  value={editLeadStatus}
+                  onChange={(e) => setEditLeadStatus(e.target.value as LeadStatus)}
+                  className="w-full mt-1 px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  {LEAD_STATUS_OPTIONS.map((status) => (
+                    <option key={status.value} value={status.value}>{status.label}</option>
+                  ))}
+                </select>
+              </label>
+
+              <div>
+                <span className="text-sm font-semibold text-slate-600">Produtos ofertados</span>
+                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {PRODUTOS_OFERTADOS_OPTIONS.map((produto) => (
+                    <label key={produto.value} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={editProdutosOfertados.includes(produto.value)}
+                        onChange={() => alternarProdutoOfertado(produto.value)}
+                        className="h-4 w-4 rounded border-slate-300 text-blue-600"
+                      />
+                      <span>{produto.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <label className="block">
+                <span className="text-sm font-semibold text-slate-600">Observação comercial</span>
+                <textarea
+                  value={editObservacao}
+                  onChange={(e) => setEditObservacao(e.target.value)}
+                  className="w-full mt-1 min-h-28 px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Observações internas sobre o acompanhamento"
+                />
+              </label>
+
+              <div className="flex justify-end gap-3 mt-2">
+                <button type="button" onClick={() => setModalComercialAberto(false)} className="px-4 py-2 text-slate-500 font-semibold hover:bg-slate-100 rounded-lg">Cancelar</button>
+                <button type="submit" className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-md">Salvar comercial</button>
               </div>
             </form>
           </div>
