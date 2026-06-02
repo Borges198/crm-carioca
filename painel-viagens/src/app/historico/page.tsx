@@ -5,8 +5,9 @@ import { Timestamp } from 'firebase/firestore';
 import Link from 'next/link';
 import AuthGuard from '../../components/AuthGuard';
 import { useAuth } from '../../context/AuthContext';
+import { criarCliente, listarClientesDoUsuario } from '../../services/clientesService';
 import { atualizarCotacao, excluirCotacao as excluirCotacaoFirestore, listarCotacoesDoUsuario } from '../../services/cotacoesService';
-import type { Cotacao } from '../../types';
+import type { Cotacao, NovoCliente } from '../../types';
 import {
   LEAD_STATUS_OPTIONS,
   PRODUTOS_OFERTADOS_OPTIONS,
@@ -152,6 +153,59 @@ function HistoricoContent() {
     } catch (error) {
       console.error("Erro ao salvar dados comerciais:", error);
       alert("Erro ao salvar dados comerciais.");
+    }
+  };
+
+  const normalizarNomeCliente = (nome: string) => (
+    nome.trim().toLowerCase().replace(/\s+/g, ' ')
+  );
+
+  const montarResumoViagem = (item: Cotacao) => {
+    const rota = `${item.origem} → ${item.destino}`;
+    if (!item.dataIda) return rota;
+    return `${rota} | ${formatarData(item.dataIda)}`;
+  };
+
+  const adicionarAosClientes = async (item: Cotacao) => {
+    if (!user) {
+      alert("Você precisa estar logado para adicionar um cliente.");
+      return;
+    }
+
+    if (item.leadStatus !== 'fechado') {
+      alert("Somente cotações marcadas como fechado podem virar cliente.");
+      return;
+    }
+
+    const nomeCliente = item.cliente?.trim() || 'Cliente sem nome';
+    const confirmar = window.confirm(`Adicionar ${nomeCliente} à carteira de clientes?`);
+    if (!confirmar) return;
+
+    try {
+      const clientesExistentes = await listarClientesDoUsuario(user.uid);
+      const nomeNormalizado = normalizarNomeCliente(nomeCliente);
+      const clienteDuplicado = clientesExistentes.some((cliente) => (
+        normalizarNomeCliente(cliente.nome) === nomeNormalizado
+      ));
+
+      if (clienteDuplicado) {
+        alert("Este cliente já existe na carteira.");
+        return;
+      }
+
+      const novoCliente: NovoCliente = {
+        nome: nomeCliente,
+        origemLead: 'Cotação fechada',
+        primeiraViagem: montarResumoViagem(item),
+        ownerId: user.uid,
+        dataCadastro: new Date(),
+      };
+
+      await criarCliente(novoCliente);
+      alert("Cliente adicionado à carteira com sucesso.");
+    } catch (error) {
+      console.error("Erro ao adicionar cliente a partir da cotação:", error);
+      alert("Erro ao adicionar cliente.");
     }
   };
 
@@ -312,6 +366,15 @@ function HistoricoContent() {
                       >
                         Editar comercial
                       </button>
+                      {item.leadStatus === 'fechado' && (
+                        <button
+                          type="button"
+                          onClick={() => adicionarAosClientes(item)}
+                          className="mt-2 block rounded-md border border-green-200 bg-green-50 px-2 py-1 text-[10px] font-black uppercase text-green-700 transition hover:bg-green-100"
+                        >
+                          Adicionar aos clientes
+                        </button>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-gray-400 text-[11px] font-medium">
                       {formatarData(item.dataRegistro)}
