@@ -118,7 +118,7 @@ Qualquer melhoria futura deve preservar as regras de seguranca, isolamento por u
 
 ## Fase 6: Leads, Historico Comercial e Clientes Reais
 
-Status: arquitetura documentada, ainda sem implementacao de codigo.
+Status: primeira implementacao de Leads concluida; Clientes Reais ainda e etapa futura.
 
 Decisao central:
 
@@ -133,7 +133,16 @@ Campos planejados para cotacoes:
 - `produtosOfertados?: string[]`;
 - `observacao?: string`;
 - `leadStatus?: string`;
-- `leadAtualizadoEm?: Timestamp`.
+- `leadAtualizadoEm?: Timestamp` em evolucao posterior.
+
+Ja implementado:
+
+- campos comerciais em cotacoes: `produtosOfertados`, `observacao` e `leadStatus`;
+- edicao comercial no `/historico`;
+- primeira versao de `/leads`;
+- `/leads` como visao interna baseada em `cotacoes`, sem colecao nova;
+- status abertos aparecem por padrao;
+- `fechado` e `perdido` nao aparecem por padrao.
 
 Status comerciais sugeridos:
 
@@ -173,9 +182,9 @@ Regra para `/clientes`:
 
 Plano em fases pequenas:
 
-- documentar contrato de negocio e modelo planejado;
-- adicionar campos opcionais em cotacoes mantendo compatibilidade com documentos antigos;
-- permitir status comercial no `/historico`;
-- criar `/leads` como visao de oportunidades abertas;
+- documentar contrato de negocio e modelo planejado: concluido;
+- adicionar campos opcionais em cotacoes mantendo compatibilidade com documentos antigos: concluido em primeira versao;
+- permitir status comercial no `/historico`: concluido em primeira versao;
+- criar `/leads` como visao de oportunidades abertas: concluido em primeira versao;
 - adicionar fluxo manual para converter cotacao fechada em cliente real;
 - estudar deduplicacao antes de qualquer automacao.
