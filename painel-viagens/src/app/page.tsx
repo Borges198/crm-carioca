@@ -14,6 +14,11 @@ import type { Companhia, NovaCotacao } from '../types';
 import { extrairDadosSmartPaste } from '../utils/smartPasteUtils';
 import { montarNovaCotacao } from '../utils/cotacaoMapper';
 import { gerarMensagemWhatsApp } from '../utils/whatsappMessageUtils';
+import { extrairCandidatosSmartPaste, type SmartPasteCandidate, type SmartPasteCandidatesResult } from '../lib/smartPasteCandidatesUtils';
+
+interface SmartPasteConferencia extends SmartPasteCandidatesResult {
+  textoOrigemPreview: string;
+}
 
 export default function Home() {
   const { user } = useAuth();
@@ -46,6 +51,7 @@ export default function Home() {
   const [valorIda, setValorIda] = useState<number | null>(null);
   const [valorVolta, setValorVolta] = useState<number | null>(null);
   const [mensagemWhatsapp, setMensagemWhatsapp] = useState('');
+  const [smartPasteConferencia, setSmartPasteConferencia] = useState<SmartPasteConferencia | null>(null);
 
   const ticketRef = useRef<HTMLDivElement>(null);
 
@@ -83,7 +89,37 @@ export default function Home() {
       return null;
     }
 
+    const candidatos = extrairCandidatosSmartPaste(text);
+    setSmartPasteConferencia({
+      ...candidatos,
+      textoOrigemPreview: text.replace(/\s+/g, ' ').trim().slice(0, 140),
+    });
+
     return extrairDadosSmartPaste(text);
+  };
+
+  const aplicarCandidatoSmartPaste = (candidate: SmartPasteCandidate) => {
+    const pontosArredondados = typeof candidate.rounded.pontos === 'number'
+      ? String(candidate.rounded.pontos)
+      : null;
+    const taxaArredondada = typeof candidate.rounded.taxa === 'number'
+      ? String(candidate.rounded.taxa)
+      : null;
+
+    if (candidate.trecho === 'total') {
+      if (pontosArredondados) setPontos(pontosArredondados);
+      if (taxaArredondada) setTaxaEmbarque(taxaArredondada);
+      return;
+    }
+
+    if (candidate.trecho === 'volta') {
+      if (pontosArredondados) setPontosVolta(pontosArredondados);
+      if (taxaArredondada) setTaxaVolta(taxaArredondada);
+      return;
+    }
+
+    if (pontosArredondados) setPontosIda(pontosArredondados);
+    if (taxaArredondada) setTaxaIda(taxaArredondada);
   };
 
   const handleSmartPaste = async () => {
@@ -337,6 +373,8 @@ export default function Home() {
           handleSmartPaste={handleSmartPaste}
           handleSmartPasteIda={handleSmartPasteIda}
           handleSmartPasteVolta={handleSmartPasteVolta}
+          smartPasteConferencia={smartPasteConferencia}
+          onAplicarCandidatoSmartPaste={aplicarCandidatoSmartPaste}
           gerarCotacao={gerarCotacao}
         />
 

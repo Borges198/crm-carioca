@@ -14,7 +14,7 @@ Registrar decisoes tecnicas e operacionais do CRM Voo Singular para preservar co
 - Filtrar telas de historico e clientes por `ownerId`.
 - Manter BilhetePreview sem valores internos.
 - Manter Smart Paste global enquanto o Smart Paste Assistido nao estiver pronto.
-- Planejar Smart Paste Assistido com conferencia humana.
+- Implementar Smart Paste Assistido como camada de conferencia humana, sem substituir o parser principal.
 - Preservar documentos antigos sem `ownerId` ate existir plano de migracao.
 
 ## Motivo de usar ownerId
@@ -61,7 +61,20 @@ Mudancas nessa area devem manter compatibilidade operacional ate que o fluxo ass
 
 ## Decisao de Smart Paste Assistido com conferencia humana
 
-O Smart Paste Assistido deve interpretar texto automaticamente, mas exigir confirmacao antes de alterar a cotacao.
+O Smart Paste Assistido interpreta texto automaticamente, mas nao substitui o parser principal.
+
+Decisoes:
+
+- manter `extrairDadosSmartPaste(text)` como parser principal do fluxo atual;
+- usar `extrairCandidatosSmartPaste(text)` como camada assistiva de candidatos;
+- rodar a camada assistiva em paralelo ao parser principal;
+- exibir candidatos como sugestoes para conferencia visual;
+- nao autoaplicar candidatos ao colar texto;
+- permitir aplicacao apenas por acao manual e explicita do usuario;
+- limitar a aplicacao manual, por enquanto, a pontos/milhas e taxa;
+- nao aplicar automaticamente origem, destino, datas, cliente, companhia ou tipo de voo a partir dos candidatos.
+
+O fluxo visual deve priorizar conferencia humana. A UI pode sugerir valores, mas a decisao operacional permanece com o usuario.
 
 Motivos:
 
@@ -70,7 +83,7 @@ Motivos:
 - a conferencia humana reduz erro silencioso;
 - o usuario continua ganhando velocidade sem abrir mao de controle.
 
-O fluxo desejado e: colar texto, interpretar, apresentar dados estruturados, permitir revisao e aplicar somente apos confirmacao.
+O fluxo atual e: colar texto, manter o preenchimento do parser principal, apresentar candidatos estruturados em "Conferencia Smart Paste" e permitir aplicacao manual apenas de pontos/milhas e taxa.
 
 ## Decisao de preservar documentos antigos ate plano de migracao
 

@@ -48,22 +48,32 @@ Pontos de atencao:
 
 ## Fase 3: Smart Paste Assistido
 
-Status: desejado.
+Status: primeira camada implementada.
 
 Escopo:
 
-- substituir ou complementar o Smart Paste direto por um fluxo assistido;
-- interpretar texto bruto em estrutura revisavel;
-- mostrar uma tela/modal de conferencia antes de preencher campos;
-- permitir aplicar dados globalmente, na ida ou na volta;
-- destacar campos com baixa confianca ou ausentes;
-- preservar o Smart Paste global enquanto o assistido nao estiver pronto.
+- manter `extrairDadosSmartPaste(text)` como parser principal;
+- usar `extrairCandidatosSmartPaste(text)` como camada assistiva em paralelo;
+- interpretar texto bruto em candidatos revisaveis;
+- mostrar conferencia visual com companhia, trecho, pontos/milhas, taxa e preview curto;
+- permitir aplicacao manual de candidato somente por clique explicito;
+- limitar a aplicacao manual atual a pontos/milhas e taxa;
+- preservar o Smart Paste atual e seu preenchimento automatico historico;
+- nao aplicar automaticamente candidatos ao colar texto.
 
 Criterio de aceite:
 
-- nenhum dado extraido automaticamente deve ser aplicado sem confirmacao humana no fluxo assistido;
-- usuario consegue revisar datas, horarios, aeroportos, companhia, paradas, milhas e taxas;
+- nenhum candidato deve ser aplicado sem confirmacao humana;
+- usuario consegue revisar candidatos antes de aplicar;
+- candidatos podem aplicar apenas pontos/milhas e taxa nesta fase;
+- origem, destino, datas, cliente, companhia e tipo de voo nao devem ser alterados pela aplicacao manual de candidatos;
 - fluxo reduz erros silenciosos sem atrasar demais a operacao.
+
+Proxima evolucao:
+
+- validar manualmente o fluxo visual usando `docs/checklist-smart-paste.md`;
+- estudar aplicacao assistida de outros campos apenas depois de nova decisao arquitetural;
+- manter testes de caracterizacao com fixtures reais das companhias.
 
 ## Fase 4: seguranca e producao
 
