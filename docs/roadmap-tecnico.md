@@ -99,6 +99,7 @@ Pontos de atencao:
 
 Ideias candidatas:
 
+- Leads, Historico Comercial e Clientes Reais conforme `docs/checklist-leads.md`;
 - historico com filtros mais avancados;
 - busca por cliente, rota, periodo, companhia e status;
 - edicao completa de cotacoes salvas;
@@ -112,3 +113,67 @@ Ideias candidatas:
 - documentacao de deploy e operacao em producao.
 
 Qualquer melhoria futura deve preservar as regras de seguranca, isolamento por usuario e nao exposicao de valores internos no BilhetePreview.
+
+## Fase 6: Leads, Historico Comercial e Clientes Reais
+
+Status: arquitetura documentada, ainda sem implementacao de codigo.
+
+Decisao central:
+
+- `/historico` continua sendo o registro de cotacoes;
+- `/leads` sera a area de oportunidades em acompanhamento comercial;
+- `/clientes` representa carteira de compradores reais.
+
+`/clientes` nao deve representar todos os leads. Cliente real e uma pessoa que ja comprou antes ou uma pessoa cuja cotacao foi marcada como `fechado` e adicionada a carteira.
+
+Campos planejados para cotacoes:
+
+- `produtosOfertados?: string[]`;
+- `observacao?: string`;
+- `leadStatus?: string`;
+- `leadAtualizadoEm?: Timestamp`.
+
+Status comerciais sugeridos:
+
+- `novo`;
+- `em_monitoramento`;
+- `aguardando_cliente`;
+- `orcamento_enviado`;
+- `negociacao`;
+- `fechado`;
+- `perdido`.
+
+Produtos ofertados sugeridos:
+
+- `passagem_aerea`;
+- `hospedagem`;
+- `cruzeiro`;
+- `aluguel_carros`;
+- `seguro_viagem`;
+- `pacote_completo`;
+- `transfer`;
+- `passeios`;
+- `visto`;
+- `chip_internacional`.
+
+Regra para `/leads`:
+
+- mostrar oportunidades abertas com status `novo`, `em_monitoramento`, `aguardando_cliente`, `orcamento_enviado` e `negociacao`;
+- nao tratar `fechado` como lead aberto;
+- manter `perdido` acessivel por filtro, mas fora da prioridade principal.
+
+Regra para `/clientes`:
+
+- representar compradores reais;
+- permitir cadastro manual;
+- permitir criacao a partir de cotacao marcada como `fechado`;
+- preferir inicialmente botao ou acao `Adicionar aos clientes` apos o fechamento, em vez de criacao automatica.
+
+Plano em fases pequenas:
+
+- documentar contrato de negocio e modelo planejado;
+- adicionar campos opcionais em cotacoes mantendo compatibilidade com documentos antigos;
+- permitir status comercial no `/historico`;
+- criar `/leads` como visao de oportunidades abertas;
+- adicionar fluxo manual para converter cotacao fechada em cliente real;
+- estudar deduplicacao antes de qualquer automacao.

@@ -16,6 +16,8 @@ Registrar decisoes tecnicas e operacionais do CRM Voo Singular para preservar co
 - Manter Smart Paste global enquanto o Smart Paste Assistido nao estiver pronto.
 - Implementar Smart Paste Assistido como camada de conferencia humana, sem substituir o parser principal.
 - Preservar documentos antigos sem `ownerId` ate existir plano de migracao.
+- Separar `/historico`, `/leads` e `/clientes` como areas com responsabilidades diferentes.
+- Tratar `/clientes` como carteira de compradores reais, nao como lista geral de leads.
 
 ## Motivo de usar ownerId
 
@@ -97,3 +99,70 @@ Motivos:
 - pode ser melhor migrar, arquivar ou aceitar inacessibilidade conforme decisao operacional.
 
 Antes de aplicar regras de seguranca em producao, e necessario decidir explicitamente o destino desses documentos antigos.
+
+## Decisao sobre Historico, Leads e Clientes Reais
+
+`/historico`, `/leads` e `/clientes` devem ter responsabilidades diferentes.
+
+Decisoes:
+
+- `/historico` continua sendo o registro de cotacoes;
+- `/leads` sera a area de oportunidades em acompanhamento comercial;
+- `/clientes` representa carteira de compradores reais.
+
+`/clientes` nao deve ser tratado como deposito de todo lead. Um cliente real e uma pessoa que ja comprou antes ou uma pessoa cuja cotacao foi marcada como `fechado` no `/historico` e depois adicionada a carteira.
+
+Motivos:
+
+- lead aberto ainda e oportunidade, nao comprador;
+- misturar leads e clientes distorce a carteira comercial;
+- compradores reais precisam ser uma base mais confiavel para relacionamento, recompra e acompanhamento pos-venda;
+- cotacoes fechadas devem continuar existindo no `/historico`, mesmo quando geram um cadastro em `/clientes`.
+
+Campos planejados para evoluir cotacoes:
+
+- `produtosOfertados?: string[]`;
+- `observacao?: string`;
+- `leadStatus?: string`;
+- `leadAtualizadoEm?: Timestamp`.
+
+Status comerciais sugeridos:
+
+- `novo`;
+- `em_monitoramento`;
+- `aguardando_cliente`;
+- `orcamento_enviado`;
+- `negociacao`;
+- `fechado`;
+- `perdido`.
+
+Produtos ofertados sugeridos:
+
+- `passagem_aerea`;
+- `hospedagem`;
+- `cruzeiro`;
+- `aluguel_carros`;
+- `seguro_viagem`;
+- `pacote_completo`;
+- `transfer`;
+- `passeios`;
+- `visto`;
+- `chip_internacional`.
+
+Em `/leads`, a visao principal deve mostrar apenas oportunidades ainda abertas: `novo`, `em_monitoramento`, `aguardando_cliente`, `orcamento_enviado` e `negociacao`.
+
+`fechado` nao deve aparecer como lead aberto. `perdido` pode ficar acessivel por filtro, mas nao deve ser prioridade principal.
+
+Em `/clientes`, a criacao pode acontecer manualmente ou a partir de uma cotacao marcada como `fechado`.
+
+Inicialmente, a conversao de cotacao fechada para cliente deve ser manual, por uma acao como `Adicionar aos clientes`. A criacao automatica deve ser evitada enquanto nao houver regra confiavel de deduplicacao, porque a mesma pessoa pode aparecer com variacoes de nome, telefone ou e-mail.
+
+Plano de implementacao:
+
+- documentar o contrato de negocio;
+- adicionar campos opcionais em cotacoes;
+- preservar compatibilidade com cotacoes antigas;
+- permitir atualizar status comercial no `/historico`;
+- criar `/leads` como visao de oportunidades abertas;
+- oferecer acao manual para adicionar cliente depois de marcar cotacao como `fechado`;
+- estudar deduplicacao antes de automatizar conversoes.
