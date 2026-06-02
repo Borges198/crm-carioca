@@ -1,4 +1,5 @@
 import type { Companhia, NovaCotacao } from '../types';
+import type { LeadStatus, ProdutoOfertado } from '../lib/leadUtils';
 import { calcularDuracao } from './viagemUtils';
 
 interface MontarNovaCotacaoInput {
@@ -28,6 +29,9 @@ interface MontarNovaCotacaoInput {
   valorIda?: number;
   valorVolta?: number | null;
   mensagem?: string;
+  produtosOfertados?: ProdutoOfertado[] | string[];
+  observacao?: string;
+  leadStatus?: LeadStatus;
 }
 
 export function montarNovaCotacao(input: MontarNovaCotacaoInput): NovaCotacao {
@@ -46,7 +50,10 @@ export function montarNovaCotacao(input: MontarNovaCotacaoInput): NovaCotacao {
     dataVolta: input.tipoVoo === 'ida_volta' ? input.dataVolta : null,
     valorTotal: input.valorTotal,
     dataRegistro: new Date(),
-    status: 'Novo 🆕'
+    status: 'Novo 🆕',
+    produtosOfertados: input.produtosOfertados ?? [],
+    observacao: input.observacao?.trim() ?? '',
+    leadStatus: input.leadStatus ?? 'novo'
   };
 
   if (typeof input.companhiaIda !== 'undefined') {

@@ -7,6 +7,7 @@ import AuthGuard from '../../components/AuthGuard';
 import { useAuth } from '../../context/AuthContext';
 import { atualizarCotacao, excluirCotacao as excluirCotacaoFirestore, listarCotacoesDoUsuario } from '../../services/cotacoesService';
 import type { Cotacao } from '../../types';
+import { formatarLeadStatus, formatarProdutoOfertado } from '../../lib/leadUtils';
 
 export default function Historico() {
   return (
@@ -185,6 +186,7 @@ function HistoricoContent() {
                   <th className="px-6 py-4">Rota / Cia</th>
                   <th className="px-6 py-4">Valor Total</th>
                   <th className="px-6 py-4">Status da Venda</th>
+                  <th className="px-6 py-4">Comercial</th>
                   <th className="px-6 py-4">Data Registro</th>
                   <th className="px-6 py-4 text-center">Ações</th>
                 </tr>
@@ -217,6 +219,25 @@ function HistoricoContent() {
                         <option value="Fechado ✅">Fechado ✅</option>
                         <option value="Desistiu ❌">Desistiu ❌</option>
                       </select>
+                    </td>
+                    <td className="px-6 py-4 text-xs">
+                      <div className="font-black uppercase text-slate-700">
+                        {formatarLeadStatus(item.leadStatus)}
+                      </div>
+                      {item.produtosOfertados && item.produtosOfertados.length > 0 && (
+                        <div className="mt-1 flex max-w-48 flex-wrap gap-1">
+                          {item.produtosOfertados.map((produto) => (
+                            <span key={produto} className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+                              {formatarProdutoOfertado(produto)}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {item.observacao && (
+                        <p className="mt-1 max-w-48 truncate text-[11px] font-medium text-slate-500" title={item.observacao}>
+                          {item.observacao}
+                        </p>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-gray-400 text-[11px] font-medium">
                       {formatarData(item.dataRegistro)}

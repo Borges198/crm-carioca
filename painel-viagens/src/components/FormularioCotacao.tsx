@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { listarNomesClientesDasCotacoes } from '../services/cotacoesService';
 import type { Companhia } from '../types';
 import type { SmartPasteCandidate, SmartPasteCandidatesResult } from '../lib/smartPasteCandidatesUtils';
+import { LEAD_STATUS_OPTIONS, PRODUTOS_OFERTADOS_OPTIONS, type LeadStatus, type ProdutoOfertado } from '../lib/leadUtils';
 
 // Função auxiliar para garantir que a máscara de hora funcione perfeitamente
 const maskHora = (value: string) => {
@@ -39,6 +40,9 @@ interface FormularioCotacaoProps {
   taxaVolta: string; setTaxaVolta: (v: string) => void;
   pontos: string; setPontos: (v: string) => void;
   taxaEmbarque: string; setTaxaEmbarque: (v: string) => void;
+  produtosOfertados: ProdutoOfertado[]; setProdutosOfertados: (v: ProdutoOfertado[]) => void;
+  observacao: string; setObservacao: (v: string) => void;
+  leadStatus: LeadStatus; setLeadStatus: (v: LeadStatus) => void;
   handleSmartPaste: () => void;
   handleSmartPasteIda: () => void;
   handleSmartPasteVolta: () => void;
@@ -61,6 +65,7 @@ export default function FormularioCotacao({
   dataVolta, setDataVolta, horaSaidaVolta, setHoraSaidaVolta, horaChegadaVolta, setHoraChegadaVolta, paradasVolta, setParadasVolta,
   pontosIda, setPontosIda, pontosVolta, setPontosVolta, taxaIda, setTaxaIda, taxaVolta, setTaxaVolta,
   pontos, setPontos, taxaEmbarque, setTaxaEmbarque,
+  produtosOfertados, setProdutosOfertados, observacao, setObservacao, leadStatus, setLeadStatus,
   handleSmartPaste, handleSmartPasteIda, handleSmartPasteVolta, smartPasteConferencia, onAplicarCandidatoSmartPaste, gerarCotacao
 }: FormularioCotacaoProps) {
   
@@ -98,6 +103,13 @@ export default function FormularioCotacao({
     taxaIda.trim() ||
     (tipoVoo === 'ida_volta' && (pontosVolta.trim() || taxaVolta.trim()))
   );
+  const alternarProdutoOfertado = (produto: ProdutoOfertado) => {
+    setProdutosOfertados(
+      produtosOfertados.includes(produto)
+        ? produtosOfertados.filter((item) => item !== produto)
+        : [...produtosOfertados, produto]
+    );
+  };
 
   return (
     <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-200">
@@ -323,6 +335,50 @@ export default function FormularioCotacao({
           <input type="text" value={pontos} onChange={(e) => setPontos(e.target.value)} placeholder="Pontos" className="w-full px-4 py-2 border rounded-lg bg-slate-50 text-center" />
           <input type="text" value={taxaEmbarque} onChange={(e) => setTaxaEmbarque(e.target.value)} placeholder="Taxa" className="w-full px-4 py-2 border rounded-lg bg-slate-50 text-center" />
         </div>
+
+        <section className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <p className="mb-3 text-xs font-bold uppercase text-slate-500">Monitoramento comercial</p>
+
+          <label className="block">
+            <span className="mb-1 block text-xs font-bold uppercase text-slate-500">Status comercial</span>
+            <select
+              value={leadStatus}
+              onChange={(e) => setLeadStatus(e.target.value as LeadStatus)}
+              className="w-full rounded-lg border bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+            >
+              {LEAD_STATUS_OPTIONS.map((status) => (
+                <option key={status.value} value={status.value}>{status.label}</option>
+              ))}
+            </select>
+          </label>
+
+          <div className="mt-3">
+            <span className="mb-2 block text-xs font-bold uppercase text-slate-500">Produtos ofertados</span>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {PRODUTOS_OFERTADOS_OPTIONS.map((produto) => (
+                <label key={produto.value} className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={produtosOfertados.includes(produto.value)}
+                    onChange={() => alternarProdutoOfertado(produto.value)}
+                    className="h-4 w-4 rounded border-slate-300 text-blue-600"
+                  />
+                  <span>{produto.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <label className="mt-3 block">
+            <span className="mb-1 block text-xs font-bold uppercase text-slate-500">Observacao comercial</span>
+            <textarea
+              value={observacao}
+              onChange={(e) => setObservacao(e.target.value)}
+              placeholder="Observacoes internas sobre o acompanhamento"
+              className="min-h-24 w-full rounded-lg border bg-white px-4 py-2 text-sm text-slate-700"
+            />
+          </label>
+        </section>
 
         <button onClick={gerarCotacao} className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition shadow-md">
           Calcular e Salvar Cotação

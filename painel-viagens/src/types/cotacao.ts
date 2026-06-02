@@ -1,4 +1,5 @@
 import type { Timestamp } from 'firebase/firestore';
+import type { LeadStatus, ProdutoOfertado } from '../lib/leadUtils';
 
 export type Companhia = 'Azul' | 'GOL' | 'Latam';
 
@@ -48,6 +49,9 @@ export interface Cotacao {
   paradasIda?: string;
   dataVolta?: string | null;
   status?: StatusCotacao | string;
+  produtosOfertados?: ProdutoOfertado[] | string[];
+  observacao?: string;
+  leadStatus?: LeadStatus | string;
 }
 
 export type NovaCotacao = Omit<Cotacao, 'id'> & {
