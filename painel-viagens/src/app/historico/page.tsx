@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Timestamp } from 'firebase/firestore';
 import AuthGuard from '../../components/AuthGuard';
+import EmptyState from '../../components/EmptyState';
 import { useAuth } from '../../context/AuthContext';
 import { criarCliente, listarClientesDoUsuario } from '../../services/clientesService';
 import { atualizarCotacao, excluirCotacao as excluirCotacaoFirestore, listarCotacoesDoUsuario } from '../../services/cotacoesService';
@@ -289,6 +290,15 @@ function HistoricoContent() {
           <div className="flex justify-center items-center py-20">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
           </div>
+        ) : cotacoes.length === 0 ? (
+          <EmptyState
+            title="Nenhuma cotação registrada ainda"
+            description="As cotações salvas aparecerão aqui como memória comercial da agência. Comece criando uma nova cotação para acompanhar valores, status e próximos passos."
+            actions={[
+              { href: '/', label: 'Criar nova cotação' },
+              { href: '/leads', label: 'Ver leads', variant: 'secondary' },
+            ]}
+          />
         ) : (
           <div className="bg-white shadow-xl rounded-2xl overflow-hidden border border-gray-100 text-gray-800">
             <table className="w-full text-left border-collapse">

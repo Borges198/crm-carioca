@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Timestamp } from 'firebase/firestore';
 import AuthGuard from '../../components/AuthGuard';
+import EmptyState from '../../components/EmptyState';
 import { useAuth } from '../../context/AuthContext';
 import { listarCotacoesDoUsuario } from '../../services/cotacoesService';
 import type { Cotacao } from '../../types';
@@ -124,9 +125,14 @@ function LeadsContent() {
             <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-t-2 border-blue-600"></div>
           </div>
         ) : cotacoesFiltradas.length === 0 ? (
-          <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-sm">
-            <p className="text-sm font-bold text-slate-500">Nenhuma oportunidade encontrada para este filtro.</p>
-          </div>
+          <EmptyState
+            title="Nenhuma oportunidade encontrada"
+            description="Não há leads para o filtro selecionado. Revise os status comerciais no histórico ou crie uma nova cotação para iniciar um acompanhamento."
+            actions={[
+              { href: '/historico', label: 'Revisar histórico' },
+              { href: '/', label: 'Criar nova cotação', variant: 'secondary' },
+            ]}
+          />
         ) : (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {cotacoesFiltradas.map((cotacao) => (

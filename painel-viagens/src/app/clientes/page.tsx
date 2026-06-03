@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Timestamp } from 'firebase/firestore';
 import AuthGuard from '../../components/AuthGuard';
+import EmptyState from '../../components/EmptyState';
 import { useAuth } from '../../context/AuthContext';
 import { atualizarCliente, criarCliente, excluirCliente as excluirClienteFirestore, listarClientesDoUsuario } from '../../services/clientesService';
 import type { Cliente, NovoCliente } from '../../types';
@@ -155,6 +156,15 @@ function ClientesContent() {
           <div className="flex justify-center items-center py-20">
             <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-green-600"></div>
           </div>
+        ) : clientes.length === 0 ? (
+          <EmptyState
+            title="Nenhum cliente real na carteira"
+            description="Clientes representam compradores reais. Depois que uma cotação for marcada como fechada no histórico, ela poderá ser adicionada manualmente à carteira."
+            actions={[
+              { href: '/historico', label: 'Ir para histórico' },
+              { href: '/leads', label: 'Ver oportunidades', variant: 'secondary' },
+            ]}
+          />
         ) : (
           <div className="bg-white shadow-md rounded-2xl overflow-hidden border border-slate-100">
             <table className="w-full text-left border-collapse">
