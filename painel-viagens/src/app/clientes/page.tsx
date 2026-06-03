@@ -145,7 +145,7 @@ function ClientesContent() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 p-8">
+    <main className="min-h-screen bg-slate-50 p-4 sm:p-6 md:p-8">
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col gap-4 mb-8 md:flex-row md:items-center md:justify-between">
           <div>
@@ -178,33 +178,34 @@ function ClientesContent() {
             ]}
           />
         ) : (
-          <div className="bg-white shadow-md rounded-2xl overflow-hidden border border-slate-100">
+          <div className="-mx-4 overflow-x-auto sm:mx-0">
+            <div className="min-w-[860px] overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-md">
             <table className="w-full text-left border-collapse">
               <thead className="bg-slate-100 text-slate-600 uppercase text-xs font-bold border-b border-slate-200">
                 <tr>
-                  <th className="px-6 py-4">Nome do cliente</th>
-                  <th className="px-6 py-4">Contato</th>
-                  <th className="px-6 py-4">Origem</th>
-                  <th className="px-6 py-4">Última viagem</th>
-                  <th className="px-6 py-4">Data de cadastro</th>
-                  <th className="px-6 py-4 text-center">Ações</th>
+                  <th className="px-4 py-4 md:px-6">Nome do cliente</th>
+                  <th className="px-4 py-4 md:px-6">Contato</th>
+                  <th className="px-4 py-4 md:px-6">Origem</th>
+                  <th className="px-4 py-4 md:px-6">Última viagem</th>
+                  <th className="px-4 py-4 md:px-6">Data de cadastro</th>
+                  <th className="px-4 py-4 text-center md:px-6">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {clientes.map((cliente) => (
                   <tr key={cliente.id} className="hover:bg-slate-50 transition duration-150">
-                    <td className="px-6 py-4 font-bold text-slate-800 text-lg">{cliente.nome}</td>
-                    <td className="px-6 py-4 text-slate-600">{cliente.telefone}</td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-4 font-bold text-slate-800 text-lg md:px-6">{cliente.nome}</td>
+                    <td className="px-4 py-4 text-slate-600 md:px-6">{cliente.telefone}</td>
+                    <td className="px-4 py-4 md:px-6">
                       <span className={`px-2 py-1 rounded text-xs font-bold ${
                         origemLeadNormalizada(cliente.origemLead) === 'cotação fechada' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'
                       }`}>
                         {formatarOrigemLead(cliente.origemLead)}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-slate-700 font-medium">{cliente.primeiraViagem}</td>
-                    <td className="px-6 py-4 text-slate-400 text-sm">{formatarData(cliente.dataCadastro)}</td>
-                    <td className="px-6 py-4 text-center flex items-center justify-center gap-2">
+                    <td className="px-4 py-4 text-slate-700 font-medium md:px-6">{cliente.primeiraViagem}</td>
+                    <td className="px-4 py-4 text-slate-400 text-sm md:px-6">{formatarData(cliente.dataCadastro)}</td>
+                    <td className="px-4 py-4 text-center flex items-center justify-center gap-2 md:px-6">
                       <button onClick={() => abrirModalEdicao(cliente)} className="text-blue-500 hover:text-blue-700 p-2" title="Editar cliente">✏️</button>
                       <button onClick={() => excluirCliente(cliente.id, cliente.nome)} className="text-red-400 hover:text-red-600 p-2" title="Remover cliente">🗑️</button>
                     </td>
@@ -212,6 +213,7 @@ function ClientesContent() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </div>

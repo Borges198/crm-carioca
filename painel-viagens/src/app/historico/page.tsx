@@ -258,7 +258,7 @@ function HistoricoContent() {
     .reduce((acc, curr) => acc + (curr.valorTotal || 0), 0);
 
   return (
-    <main className="min-h-screen bg-gray-50 p-8">
+    <main className="min-h-screen bg-gray-50 p-4 sm:p-6 md:p-8">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-blue-900 border-l-4 border-blue-600 pl-4">
@@ -300,24 +300,25 @@ function HistoricoContent() {
             ]}
           />
         ) : (
-          <div className="bg-white shadow-xl rounded-2xl overflow-hidden border border-gray-100 text-gray-800">
+          <div className="-mx-4 overflow-x-auto sm:mx-0">
+            <div className="min-w-[980px] overflow-hidden rounded-2xl border border-gray-100 bg-white text-gray-800 shadow-xl">
             <table className="w-full text-left border-collapse">
               <thead className="bg-gray-50 text-gray-500 uppercase text-xs font-bold border-b">
                 <tr>
-                  <th className="px-6 py-4">Cliente</th>
-                  <th className="px-6 py-4">Rota / Cia</th>
-                  <th className="px-6 py-4">Valor Total</th>
-                  <th className="px-6 py-4">Status da Venda</th>
-                  <th className="px-6 py-4">Comercial</th>
-                  <th className="px-6 py-4">Data de registro</th>
-                  <th className="px-6 py-4 text-center">Ações</th>
+                  <th className="px-4 py-4 md:px-6">Cliente</th>
+                  <th className="px-4 py-4 md:px-6">Rota / Cia</th>
+                  <th className="px-4 py-4 md:px-6">Valor Total</th>
+                  <th className="px-4 py-4 md:px-6">Status da Venda</th>
+                  <th className="px-4 py-4 md:px-6">Comercial</th>
+                  <th className="px-4 py-4 md:px-6">Data de registro</th>
+                  <th className="px-4 py-4 text-center md:px-6">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {cotacoes.map((item) => (
                   <tr key={item.id} className="hover:bg-blue-50/30 transition duration-150">
-                    <td className="px-6 py-4 font-bold">{item.cliente}</td>
-                    <td className="px-6 py-4 text-sm">
+                    <td className="px-4 py-4 font-bold md:px-6">{item.cliente}</td>
+                    <td className="px-4 py-4 text-sm md:px-6">
                       <div className="font-medium">{item.origem} ➔ {item.destino}</div>
                       <div className={`text-[10px] font-black mt-1 inline-block px-1.5 py-0.5 rounded shadow-sm ${
                         item.companhia === 'GOL' ? 'bg-orange-500 text-white' : 'bg-blue-600 text-white'
@@ -326,10 +327,10 @@ function HistoricoContent() {
                       </div>
                     </td>
                     {/* Alterado para o número puro conforme a Regra de Negócio */}
-                    <td className="px-6 py-4 font-black text-green-700 text-lg">
+                    <td className="px-4 py-4 font-black text-green-700 text-lg md:px-6">
                       {item.valorTotal}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-4 md:px-6">
                       <select 
                         value={item.status || 'Novo 🆕'} 
                         onChange={(e) => alterarStatus(item.id, e.target.value)}
@@ -342,7 +343,7 @@ function HistoricoContent() {
                         <option value="Desistiu ❌">Desistiu ❌</option>
                       </select>
                     </td>
-                    <td className="px-6 py-4 text-xs">
+                    <td className="px-4 py-4 text-xs md:px-6">
                       <div className="font-black uppercase text-slate-700">
                         {formatarLeadStatus(item.leadStatus)}
                       </div>
@@ -377,10 +378,10 @@ function HistoricoContent() {
                         </button>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-gray-400 text-[11px] font-medium">
+                    <td className="px-4 py-4 text-gray-400 text-[11px] font-medium md:px-6">
                       {formatarData(item.dataRegistro)}
                     </td>
-                    <td className="px-6 py-4 text-center flex items-center justify-center gap-2">
+                    <td className="px-4 py-4 text-center flex items-center justify-center gap-2 md:px-6">
                       <button 
                         onClick={() => abrirModalEdicao(item)}
                         className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition duration-200"
@@ -400,6 +401,7 @@ function HistoricoContent() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </div>
