@@ -265,7 +265,7 @@ function HistoricoContent() {
             Gestão de Cotações
           </h1>
           <p className="mt-2 pl-5 text-sm font-medium text-slate-500">
-            Memoria das cotacoes e ponto de acao comercial.
+            Memória das cotações e ponto de ação comercial.
           </p>
         </div>
 
@@ -309,7 +309,7 @@ function HistoricoContent() {
                   <th className="px-6 py-4">Valor Total</th>
                   <th className="px-6 py-4">Status da Venda</th>
                   <th className="px-6 py-4">Comercial</th>
-                  <th className="px-6 py-4">Data Registro</th>
+                  <th className="px-6 py-4">Data de registro</th>
                   <th className="px-6 py-4 text-center">Ações</th>
                 </tr>
               </thead>
@@ -408,10 +408,10 @@ function HistoricoContent() {
       {modalEditAberto && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md">
-            <h2 className="text-2xl font-bold text-slate-800 mb-6">Editar Dados da Cotação ✏️</h2>
+            <h2 className="text-2xl font-bold text-slate-800 mb-6">Editar dados da cotação</h2>
             <form onSubmit={salvarEdicao} className="flex flex-col gap-4">
               <div>
-                <label className="text-sm font-semibold text-slate-600">Nome do Cliente</label>
+                <label className="text-sm font-semibold text-slate-600">Nome do cliente</label>
                 <input type="text" value={editCliente} onChange={(e) => setEditCliente(e.target.value)} className="w-full mt-1 px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" required />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -434,11 +434,11 @@ function HistoricoContent() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-semibold text-slate-600">Valor Final</label>
+                  <label className="text-sm font-semibold text-slate-600">Valor final</label>
                   <input type="number" step="0.01" value={editValorTotal} onChange={(e) => setEditValorTotal(Number(e.target.value))} className="w-full mt-1 px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" required />
                 </div>
                 <div>
-                  <label className="text-sm font-semibold text-slate-600">Data Ida</label>
+                  <label className="text-sm font-semibold text-slate-600">Data da ida</label>
                   <input type="text" value={editDataIda} onChange={(e) => setEditDataIda(e.target.value)} className="w-full mt-1 px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" placeholder="DD-MM-YYYY" required />
                 </div>
               </div>

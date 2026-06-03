@@ -18,7 +18,7 @@ import {
 type FiltroStatus = 'abertos' | 'sem_status' | LeadStatus;
 
 function formatarData(data: Timestamp | string | number | Date | undefined | null) {
-  if (!data) return 'Data nao informada';
+  if (!data) return 'Data não informada';
   if (typeof (data as Timestamp).toDate === 'function') {
     return (data as Timestamp).toDate().toLocaleDateString('pt-BR');
   }
@@ -80,10 +80,10 @@ function LeadsContent() {
         <div className="mb-8">
           <div>
             <h1 className="border-l-4 border-blue-600 pl-4 text-3xl font-bold text-blue-900">
-              Leads e Oportunidades
+              Leads comerciais
             </h1>
             <p className="mt-2 pl-5 text-sm font-medium text-slate-500">
-              Acompanhamento comercial de cotacoes ainda abertas.
+              Acompanhamento comercial de cotações ainda abertas.
             </p>
           </div>
         </div>
@@ -111,7 +111,7 @@ function LeadsContent() {
               onChange={(e) => setFiltroStatus(e.target.value as FiltroStatus)}
               className="w-full rounded-lg border bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="abertos">Oportunidades abertas</option>
+              <option value="abertos">Leads abertos</option>
               {LEAD_STATUS_OPTIONS.map((status) => (
                 <option key={status.value} value={status.value}>{status.label}</option>
               ))}

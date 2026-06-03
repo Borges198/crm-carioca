@@ -370,18 +370,18 @@ export default function FormularioCotacao({
           </div>
 
           <label className="mt-3 block">
-            <span className="mb-1 block text-xs font-bold uppercase text-slate-500">Observacao comercial</span>
+            <span className="mb-1 block text-xs font-bold uppercase text-slate-500">Observação comercial</span>
             <textarea
               value={observacao}
               onChange={(e) => setObservacao(e.target.value)}
-              placeholder="Observacoes internas sobre o acompanhamento"
+              placeholder="Observações internas sobre o acompanhamento"
               className="min-h-24 w-full rounded-lg border bg-white px-4 py-2 text-sm text-slate-700"
             />
           </label>
         </section>
 
         <button onClick={gerarCotacao} className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition shadow-md">
-          Calcular e Salvar Cotação
+          Calcular e salvar cotação
         </button>
       </div>
     </div>

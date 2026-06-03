@@ -5,8 +5,8 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "../context/AuthContext";
 
 const NAV_ITEMS = [
-  { href: "/", label: "Nova cotacao" },
-  { href: "/historico", label: "Historico" },
+  { href: "/", label: "Nova cotação" },
+  { href: "/historico", label: "Histórico" },
   { href: "/leads", label: "Leads" },
   { href: "/clientes", label: "Clientes" },
 ];
@@ -31,7 +31,7 @@ export default function MainNav() {
           </p>
         </Link>
 
-        <nav aria-label="Navegacao principal" className="flex gap-2 overflow-x-auto pb-1 lg:pb-0">
+        <nav aria-label="Navegação principal" className="flex gap-2 overflow-x-auto pb-1 lg:pb-0">
           {NAV_ITEMS.map((item) => {
             const isActive = pathname === item.href;
 

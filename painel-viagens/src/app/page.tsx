@@ -348,7 +348,7 @@ export default function Home() {
         <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
           <h1 className="text-xl font-bold text-blue-900">Nova Cotação de Viagem</h1>
           <p className="mt-1 text-sm font-medium text-slate-500">
-            Crie uma cotacao e acompanhe o status comercial depois.
+            Crie uma cotação e acompanhe o status comercial depois.
           </p>
         </div>
 

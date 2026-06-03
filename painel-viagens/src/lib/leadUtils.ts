@@ -2,14 +2,14 @@ export const LEAD_STATUS_OPTIONS = [
   { value: 'novo', label: 'Novo' },
   { value: 'em_monitoramento', label: 'Em monitoramento' },
   { value: 'aguardando_cliente', label: 'Aguardando cliente' },
-  { value: 'orcamento_enviado', label: 'Orcamento enviado' },
-  { value: 'negociacao', label: 'Negociacao' },
+  { value: 'orcamento_enviado', label: 'Orçamento enviado' },
+  { value: 'negociacao', label: 'Negociação' },
   { value: 'fechado', label: 'Fechado' },
   { value: 'perdido', label: 'Perdido' },
 ] as const;
 
 export const PRODUTOS_OFERTADOS_OPTIONS = [
-  { value: 'passagem_aerea', label: 'Passagem aerea' },
+  { value: 'passagem_aerea', label: 'Passagem aérea' },
   { value: 'hospedagem', label: 'Hospedagem' },
   { value: 'cruzeiro', label: 'Cruzeiro' },
   { value: 'aluguel_carros', label: 'Aluguel de carros' },
@@ -41,7 +41,7 @@ const produtoOfertadoLabels = new Map<string, string>(
 );
 
 export function formatarLeadStatus(status?: string | null) {
-  if (!status) return 'Nao informado';
+  if (!status) return 'Não informado';
   return leadStatusLabels.get(status) ?? status;
 }
 
