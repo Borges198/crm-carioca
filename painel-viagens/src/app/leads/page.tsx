@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Timestamp } from 'firebase/firestore';
-import Link from 'next/link';
 import AuthGuard from '../../components/AuthGuard';
 import { useAuth } from '../../context/AuthContext';
 import { listarCotacoesDoUsuario } from '../../services/cotacoesService';
@@ -77,7 +76,7 @@ function LeadsContent() {
   return (
     <main className="min-h-screen bg-gray-50 p-6 md:p-8">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="mb-8">
           <div>
             <h1 className="border-l-4 border-blue-600 pl-4 text-3xl font-bold text-blue-900">
               Leads e Oportunidades
@@ -85,14 +84,6 @@ function LeadsContent() {
             <p className="mt-2 pl-5 text-sm font-medium text-slate-500">
               Acompanhamento comercial de cotacoes ainda abertas.
             </p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Link href="/historico" className="rounded-lg border bg-white px-4 py-2 font-bold text-slate-700 shadow-sm transition hover:bg-slate-100">
-              Historico
-            </Link>
-            <Link href="/" className="rounded-lg bg-blue-600 px-4 py-2 font-bold text-white shadow-md transition hover:bg-blue-700">
-              + Nova Cotacao
-            </Link>
           </div>
         </div>
 

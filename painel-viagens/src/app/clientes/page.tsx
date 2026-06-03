@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { Timestamp } from 'firebase/firestore';
-import Link from 'next/link';
 import AuthGuard from '../../components/AuthGuard';
 import { useAuth } from '../../context/AuthContext';
 import { atualizarCliente, criarCliente, excluirCliente as excluirClienteFirestore, listarClientesDoUsuario } from '../../services/clientesService';
@@ -135,15 +134,12 @@ function ClientesContent() {
   return (
     <main className="min-h-screen bg-slate-50 p-8">
       <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
+        <div className="flex flex-col gap-4 mb-8 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-3xl font-bold text-slate-800">Carteira de Clientes 💼</h1>
             <p className="text-slate-500 mt-1">O seu funil de vendas e remarketing</p>
           </div>
           <div className="flex gap-4">
-            <Link href="/historico" className="bg-white border border-slate-200 text-slate-600 px-4 py-2 rounded-lg hover:bg-slate-50 transition shadow-sm font-medium">
-              Voltar ao Histórico
-            </Link>
             <button onClick={() => setModalAberto(true)} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition font-bold shadow-md">
               + Adicionar Legado
             </button>

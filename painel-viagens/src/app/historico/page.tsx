@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { Timestamp } from 'firebase/firestore';
-import Link from 'next/link';
 import AuthGuard from '../../components/AuthGuard';
 import { useAuth } from '../../context/AuthContext';
 import { criarCliente, listarClientesDoUsuario } from '../../services/clientesService';
@@ -260,21 +259,13 @@ function HistoricoContent() {
   return (
     <main className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
+        <div className="mb-8">
           <h1 className="text-3xl font-bold text-blue-900 border-l-4 border-blue-600 pl-4">
-            Gestão de Cotações 📋
+            Gestão de Cotações
           </h1>
-          <div className="flex gap-4">
-            <Link href="/leads" className="bg-white text-slate-700 px-6 py-2 rounded-lg hover:bg-slate-100 border font-bold shadow-sm">
-              Leads Comerciais
-            </Link>
-            <Link href="/clientes" className="bg-white text-slate-700 px-6 py-2 rounded-lg hover:bg-slate-100 border font-bold shadow-sm">
-              Carteira de Clientes 💼
-            </Link>
-            <Link href="/" className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition font-bold shadow-md">
-              + Nova Cotação
-            </Link>
-          </div>
+          <p className="mt-2 pl-5 text-sm font-medium text-slate-500">
+            Memoria das cotacoes e ponto de acao comercial.
+          </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">

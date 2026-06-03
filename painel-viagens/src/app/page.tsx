@@ -2,7 +2,6 @@
 
 import { useState, useRef } from 'react';
 import { toPng } from 'html-to-image';
-import Link from 'next/link';
 
 // IMPORTANDO NOSSAS CAIXINHAS DE LEGO
 import { calcularValorTotal, calcularValorTrecho, isHoraValida, normalizarDataParaCotacao } from '../utils/viagemUtils';
@@ -343,14 +342,14 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 p-8 flex justify-center">
+    <div className="min-h-screen bg-slate-100 p-6 md:p-8 flex justify-center">
       <div className="max-w-md w-full space-y-6">
         
-        <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-          <h1 className="text-xl font-bold text-blue-900">Nova Cotação de Viagem ✈️</h1>
-          <Link href="/historico" className="text-sm font-semibold text-blue-600 hover:text-blue-800 transition">
-            Ver Histórico ➔
-          </Link>
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+          <h1 className="text-xl font-bold text-blue-900">Nova Cotação de Viagem</h1>
+          <p className="mt-1 text-sm font-medium text-slate-500">
+            Crie uma cotacao e acompanhe o status comercial depois.
+          </p>
         </div>
 
         {/* INVOCANDO O FORMULÁRIO */}
