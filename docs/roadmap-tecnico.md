@@ -199,3 +199,41 @@ Plano em fases pequenas:
 - criar `/leads` como visao de oportunidades abertas: concluido em primeira versao;
 - adicionar fluxo manual para converter cotacao fechada em cliente real: concluido em primeira versao;
 - estudar deduplicacao antes de qualquer automacao.
+
+## Fase 7: Polimento visual e responsividade mobile
+
+Status: banho de loja inicial implementado.
+
+Objetivo:
+
+- deixar o MVP mais profissional para uso operacional;
+- reduzir friccao entre `/historico`, `/leads` e `/clientes`;
+- melhorar conforto em telas pequenas sem mudar regras de negocio.
+
+Ja implementado:
+
+- navegacao principal persistente com acesso a nova cotacao, historico, leads e clientes;
+- estados vazios profissionais nas telas principais;
+- labels, textos, botoes e badges padronizados;
+- responsividade inicial das tabelas com overflow horizontal controlado;
+- cards mobile em `/historico`, mantendo tabela para desktop/tablet;
+- cards mobile em `/clientes`, mantendo tabela para desktop/tablet;
+- `/leads` ja funciona naturalmente em cards;
+- aplicacao mais confortavel para uso em celular.
+
+Validacoes realizadas durante as etapas:
+
+- `npm run test` passou;
+- `npm run lint` passou;
+- `npm run build` passou com rede externa para fontes Geist.
+
+Ponto pendente:
+
+- teste mobile real ainda esta pendente porque a aplicacao ainda nao esta hospedada.
+
+Proximos passos possiveis:
+
+- melhorar modais em telas pequenas;
+- testar mobile real depois da hospedagem;
+- revisar formulario de cotacao em celular;
+- documentar estrategia de deploy e hospedagem.

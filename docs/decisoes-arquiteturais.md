@@ -18,6 +18,7 @@ Registrar decisoes tecnicas e operacionais do CRM Voo Singular para preservar co
 - Preservar documentos antigos sem `ownerId` ate existir plano de migracao.
 - Separar `/historico`, `/leads` e `/clientes` como areas com responsabilidades diferentes.
 - Tratar `/clientes` como carteira de compradores reais, nao como lista geral de leads.
+- Tratar o banho de loja inicial como polimento de UX e responsividade, sem mudanca de modelo de dados ou regra de negocio.
 
 ## Motivo de usar ownerId
 
@@ -178,3 +179,30 @@ Plano de implementacao:
 - criar `/leads` como visao de oportunidades abertas;
 - oferecer acao manual para adicionar cliente depois de marcar cotacao como `fechado`;
 - estudar deduplicacao antes de automatizar conversoes.
+
+## Decisao sobre polimento visual e responsividade
+
+O banho de loja inicial deve melhorar a operacao diaria sem alterar contratos de dados.
+
+Decisoes:
+
+- manter navegacao principal persistente entre as areas centrais;
+- usar estados vazios profissionais para orientar proximas acoes;
+- padronizar labels, textos, botoes e badges;
+- manter tabelas em desktop/tablet quando elas ajudam na leitura comparativa;
+- usar cards mobile em telas onde tabelas ficam desconfortaveis;
+- preservar `/leads` em cards, ja que a tela funciona naturalmente como painel de oportunidades;
+- nao alterar calculo comercial, Smart Paste, BilhetePreview, services, Firebase ou regras Firestore durante polimentos visuais.
+
+Implementado no checkpoint atual:
+
+- navegacao principal persistente;
+- estados vazios profissionais;
+- labels e badges padronizados;
+- responsividade inicial das tabelas;
+- cards mobile em `/historico`;
+- cards mobile em `/clientes`.
+
+A aplicacao ficou mais confortavel para uso em celular, mas o teste mobile real segue pendente ate a aplicacao estar hospedada.
+
+Proximas melhorias de acabamento podem focar em modais em telas pequenas, formulario de cotacao no celular e documentacao de deploy/hospedagem.
