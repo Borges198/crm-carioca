@@ -42,18 +42,34 @@ function LeadsContent() {
   useEffect(() => {
     if (!user) return;
 
+    let buscaAtiva = true;
+
     const buscarDados = async () => {
+      setCarregando(true);
+
       try {
         const dados = await listarCotacoesDoUsuario(user.uid);
-        setCotacoes(dados);
+
+        if (buscaAtiva) {
+          setCotacoes(dados);
+        }
       } catch (error) {
         console.error('Erro ao buscar leads:', error);
+        if (buscaAtiva) {
+          setCotacoes([]);
+        }
       } finally {
-        setCarregando(false);
+        if (buscaAtiva) {
+          setCarregando(false);
+        }
       }
     };
 
     buscarDados();
+
+    return () => {
+      buscaAtiva = false;
+    };
   }, [user]);
 
   const cotacoesFiltradas = useMemo(() => (
@@ -140,6 +156,9 @@ function LeadsContent() {
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <h2 className="text-lg font-black text-slate-900">{cotacao.cliente}</h2>
+                    <p className="mt-1 text-xs font-semibold text-slate-500">
+                      {cotacao.telefone || 'Sem telefone'}
+                    </p>
                     <p className="mt-1 text-sm font-semibold text-slate-600">
                       {cotacao.origem} &rarr; {cotacao.destino}
                     </p>

@@ -6,28 +6,164 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function userProfilePath() {
+      return /databases/$(database)/documents/usuarios/$(request.auth.uid);
+    }
+
+    function hasUserProfile() {
+      return isSignedIn() && exists(userProfilePath());
+    }
+
+    function userProfile() {
+      return get(userProfilePath());
+    }
+
+    function isApproved() {
+      return hasUserProfile() && userProfile().data.status == "aprovado";
+    }
+
+    function userRole() {
+      return userProfile().data.role;
+    }
+
+    function userAgencyId() {
+      return userProfile().data.agencyId;
+    }
+
+    function isAdmin() {
+      return isApproved() && userRole() == "admin";
+    }
+
+    function isSupervisor() {
+      return isApproved() && userRole() == "supervisor";
+    }
+
+    function isAgent() {
+      return isApproved() && userRole() == "agent";
+    }
+
     function isOwner() {
-      return isSignedIn() && request.auth.uid == resource.data.ownerId;
+      return isSignedIn()
+        && ("ownerId" in resource.data)
+        && request.auth.uid == resource.data.ownerId;
     }
 
-    function isCreatingOwnDocument() {
-      return isSignedIn() && request.auth.uid == request.resource.data.ownerId;
+    function isSameAgency() {
+      return isApproved()
+        && ("agencyId" in resource.data)
+        && resource.data.agencyId == userAgencyId();
     }
 
-    function isUpdatingOwnDocument() {
-      return isOwner() && request.resource.data.ownerId == resource.data.ownerId;
+    function isCreatingOwnAgencyDocument() {
+      return isApproved()
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.agencyId == userAgencyId();
+    }
+
+    function preservesOwnership() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        "ownerId",
+        "ownerName",
+        "ownerEmail",
+        "agencyId"
+      ]);
+    }
+
+    function supervisorCanUpdateCommercialFields() {
+      return isSupervisor()
+        && isSameAgency()
+        && preservesOwnership()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "leadStatus",
+          "observacao",
+          "produtosOfertados",
+          "updatedAt",
+          "updatedBy"
+        ]);
+    }
+
+    function hasAdminFallback() {
+      return isSignedIn()
+        && (
+          // Fallback temporario ate custom claims estarem configuradas.
+          request.auth.uid == "tQ327uYKAdd85xTz4rdoarEYFNT2"
+          || request.auth.token.role == "admin"
+          || request.auth.token.admin == true
+        );
+    }
+
+    function isOwnUserProfile(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isCreatingPendingOwnUserProfile(uid) {
+      return isOwnUserProfile(uid)
+        && request.resource.data.status == "pendente"
+        && request.resource.data.keys().hasOnly(["status"])
+        && !("role" in request.resource.data)
+        && !("agencyId" in request.resource.data);
+    }
+
+    function isUserManager() {
+      return isAdmin() || isSupervisor();
+    }
+
+    function isUpdatingOtherUserProfile(uid) {
+      return isSignedIn() && request.auth.uid != uid;
+    }
+
+    function canApprovePendingAgent(uid) {
+      return isUserManager()
+        && isUpdatingOtherUserProfile(uid)
+        && resource.data.status == "pendente"
+        && request.resource.data.status == "aprovado"
+        && request.resource.data.role == "agent"
+        && request.resource.data.agencyId == userAgencyId()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "status",
+          "role",
+          "agencyId"
+        ]);
+    }
+
+    function canPromoteAgentToSupervisor(uid) {
+      return isUserManager()
+        && isUpdatingOtherUserProfile(uid)
+        && resource.data.status == "aprovado"
+        && resource.data.role == "agent"
+        && request.resource.data.status == resource.data.status
+        && request.resource.data.role == "supervisor"
+        && request.resource.data.agencyId == resource.data.agencyId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "role"
+        ]);
     }
 
     match /cotacoes/{cotacaoId} {
-      allow create: if isCreatingOwnDocument();
-      allow read, delete: if isOwner();
-      allow update: if isUpdatingOwnDocument();
+      allow create: if isCreatingOwnAgencyDocument();
+      allow read: if (isAgent() && isOwner()) || ((isSupervisor() || isAdmin()) && isSameAgency());
+      allow update: if (isAgent() && isOwner() && preservesOwnership())
+        || supervisorCanUpdateCommercialFields()
+        || (isAdmin() && isSameAgency() && preservesOwnership());
+      allow delete: if isAdmin() && isSameAgency();
     }
 
     match /clientes/{clienteId} {
-      allow create: if isCreatingOwnDocument();
-      allow read, delete: if isOwner();
-      allow update: if isUpdatingOwnDocument();
+      allow create: if isCreatingOwnAgencyDocument();
+      allow read: if (isAgent() && isOwner()) || ((isSupervisor() || isAdmin()) && isSameAgency());
+      allow update: if (isAgent() && isOwner() && preservesOwnership())
+        || (isAdmin() && isSameAgency() && preservesOwnership());
+      allow delete: if isAdmin() && isSameAgency();
+    }
+
+    match /usuarios/{uid} {
+      allow get: if isOwnUserProfile(uid) || isAdmin() || hasAdminFallback();
+      allow list: if isUserManager() || hasAdminFallback();
+      allow create: if isCreatingPendingOwnUserProfile(uid) || isAdmin() || hasAdminFallback();
+      allow update: if canApprovePendingAgent(uid)
+        || canPromoteAgentToSupervisor(uid)
+        || hasAdminFallback();
+      allow delete: if isAdmin() || hasAdminFallback();
     }
 
     match /{document=**} {

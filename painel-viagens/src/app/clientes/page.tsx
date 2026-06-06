@@ -6,6 +6,7 @@ import AuthGuard from '../../components/AuthGuard';
 import EmptyState from '../../components/EmptyState';
 import { useAuth } from '../../context/AuthContext';
 import { atualizarCliente, criarCliente, excluirCliente as excluirClienteFirestore, listarClientesDoUsuario } from '../../services/clientesService';
+import { DEFAULT_AGENCY_ID } from '../../types';
 import type { Cliente, NovoCliente } from '../../types';
 
 export default function Clientes() {
@@ -17,7 +18,7 @@ export default function Clientes() {
 }
 
 function ClientesContent() {
-  const { user } = useAuth();
+  const { user, accessProfile } = useAuth();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [carregando, setCarregando] = useState(true);
   
@@ -65,6 +66,7 @@ function ClientesContent() {
         origemLead: "Legado (WhatsApp)",
         primeiraViagem: novaViagem || 'Não informada',
         ownerId: user.uid,
+        agencyId: accessProfile.agencyId ?? DEFAULT_AGENCY_ID,
         dataCadastro: new Date()
       };
 

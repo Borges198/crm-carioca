@@ -6,7 +6,13 @@ import AuthGuard from '../../components/AuthGuard';
 import EmptyState from '../../components/EmptyState';
 import { useAuth } from '../../context/AuthContext';
 import { criarCliente, listarClientesDoUsuario } from '../../services/clientesService';
-import { atualizarCotacao, excluirCotacao as excluirCotacaoFirestore, listarCotacoesDoUsuario } from '../../services/cotacoesService';
+import {
+  atualizarCotacao,
+  excluirCotacao as excluirCotacaoFirestore,
+  listarCotacoesDaAgencia,
+  listarCotacoesDoUsuario,
+} from '../../services/cotacoesService';
+import { DEFAULT_AGENCY_ID } from '../../types';
 import type { Cotacao, NovoCliente } from '../../types';
 import {
   LEAD_STATUS_OPTIONS,
@@ -17,6 +23,8 @@ import {
   type ProdutoOfertado,
 } from '../../lib/leadUtils';
 
+type VisaoHistorico = 'minhas' | 'equipe';
+
 export default function Historico() {
   return (
     <AuthGuard>
@@ -26,9 +34,11 @@ export default function Historico() {
 }
 
 function HistoricoContent() {
-  const { user } = useAuth();
+  const { user, accessProfile, loading, profileLoading } = useAuth();
   const [cotacoes, setCotacoes] = useState<Cotacao[]>([]);
   const [carregando, setCarregando] = useState(true);
+  const [erroCarregamento, setErroCarregamento] = useState('');
+  const [visaoSelecionada, setVisaoSelecionada] = useState<VisaoHistorico>('minhas');
 
   // Estados para o Modal de Edição de Cotação
   const [modalEditAberto, setModalEditAberto] = useState(false);
@@ -45,24 +55,61 @@ function HistoricoContent() {
   const [editProdutosOfertados, setEditProdutosOfertados] = useState<ProdutoOfertado[]>([]);
   const [editObservacao, setEditObservacao] = useState('');
 
+  const perfilPodeVerEquipe = !loading
+    && !profileLoading
+    && (accessProfile.role === 'supervisor' || accessProfile.role === 'admin')
+    && Boolean(accessProfile.agencyId);
+  const perfilGerencialSemAgencia = !loading
+    && !profileLoading
+    && (accessProfile.role === 'supervisor' || accessProfile.role === 'admin')
+    && !accessProfile.agencyId;
+  const visaoAtiva: VisaoHistorico = perfilPodeVerEquipe ? visaoSelecionada : 'minhas';
+  const estaNaVisaoEquipe = visaoAtiva === 'equipe';
+  const usuarioEhSupervisor = accessProfile.role === 'supervisor';
+  const supervisorNaVisaoEquipe = estaNaVisaoEquipe && usuarioEhSupervisor;
+
   useEffect(() => {
     if (!user) {
       return;
     }
 
+    let buscaAtiva = true;
+
     const buscarDados = async () => {
+      setCarregando(true);
+      setErroCarregamento('');
+
       try {
-        const dados = await listarCotacoesDoUsuario(user.uid);
-        setCotacoes(dados);
+        const dados = visaoAtiva === 'equipe' && accessProfile.agencyId
+          ? await listarCotacoesDaAgencia(accessProfile.agencyId)
+          : await listarCotacoesDoUsuario(user.uid);
+
+        if (buscaAtiva) {
+          setCotacoes(dados);
+        }
       } catch (error) {
         console.error("Erro ao buscar histórico:", error);
+        if (buscaAtiva) {
+          setCotacoes([]);
+          setErroCarregamento(
+            visaoAtiva === 'equipe'
+              ? 'Não foi possível carregar as cotações da equipe. Verifique se as regras e índices do Firestore já estão publicados.'
+              : 'Não foi possível carregar suas cotações. Tente novamente.'
+          );
+        }
       } finally {
-        setCarregando(false);
+        if (buscaAtiva) {
+          setCarregando(false);
+        }
       }
     };
 
     buscarDados();
-  }, [user]);
+
+    return () => {
+      buscaAtiva = false;
+    };
+  }, [accessProfile.agencyId, user, visaoAtiva]);
 
   const abrirModalEdicao = (item: Cotacao) => {
     setCotacaoEmEdicao(item);
@@ -198,6 +245,7 @@ function HistoricoContent() {
         origemLead: 'Cotação fechada',
         primeiraViagem: montarResumoViagem(item),
         ownerId: user.uid,
+        agencyId: accessProfile.agencyId ?? DEFAULT_AGENCY_ID,
         dataCadastro: new Date(),
       };
 
@@ -251,6 +299,10 @@ function HistoricoContent() {
     return new Date(data as string | number | Date).toLocaleDateString('pt-BR');
   };
 
+  const formatarAgenteResponsavel = (item: Cotacao) => (
+    item.ownerName || item.ownerEmail || 'Agente não identificado'
+  );
+
   const totalCotacoes = cotacoes.length;
   const negociosFechados = cotacoes.filter(c => c.status === 'Fechado ✅').length;
   const volumeVendas = cotacoes
@@ -267,6 +319,55 @@ function HistoricoContent() {
           <p className="mt-2 pl-5 text-sm font-medium text-slate-500">
             Memória das cotações e ponto de ação comercial.
           </p>
+        </div>
+
+        <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase text-slate-500">Visão do histórico</p>
+              <p className="mt-1 text-sm font-medium text-slate-500">
+                Escolha entre suas cotações e a visão da equipe.
+              </p>
+            </div>
+
+            <div className="flex rounded-lg bg-slate-100 p-1">
+              <button
+                type="button"
+                onClick={() => setVisaoSelecionada('minhas')}
+                className={`rounded-md px-3 py-2 text-xs font-black uppercase transition ${
+                  visaoAtiva === 'minhas'
+                    ? 'bg-white text-blue-700 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                Minhas cotações
+              </button>
+              {perfilPodeVerEquipe && (
+                <button
+                  type="button"
+                  onClick={() => setVisaoSelecionada('equipe')}
+                  className={`rounded-md px-3 py-2 text-xs font-black uppercase transition ${
+                    visaoAtiva === 'equipe'
+                      ? 'bg-white text-blue-700 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  Equipe
+                </button>
+              )}
+            </div>
+          </div>
+
+          {perfilGerencialSemAgencia && (
+            <p className="mt-3 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+              A visão da equipe ficará disponível quando seu perfil tiver uma agência vinculada.
+            </p>
+          )}
+          {erroCarregamento && (
+            <p className="mt-3 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
+              {erroCarregamento}
+            </p>
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -307,6 +408,14 @@ function HistoricoContent() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h2 className="break-words text-lg font-black text-slate-900">{item.cliente}</h2>
+                    <p className="mt-1 text-xs font-semibold text-slate-500">
+                      {item.telefone || 'Sem telefone'}
+                    </p>
+                    {estaNaVisaoEquipe && (
+                      <p className="mt-1 text-xs font-semibold text-slate-500">
+                        Agente: {formatarAgenteResponsavel(item)}
+                      </p>
+                    )}
                     <p className="mt-1 text-sm font-bold text-slate-600">
                       {item.origem} → {item.destino}
                     </p>
@@ -332,20 +441,26 @@ function HistoricoContent() {
                 </div>
 
                 <div className="mt-4 grid grid-cols-1 gap-3">
-                  <label className="block">
+                  <div>
                     <span className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Status da venda</span>
-                    <select
-                      value={item.status || 'Novo 🆕'}
-                      onChange={(e) => alterarStatus(item.id, e.target.value)}
-                      className={`w-full text-xs font-black p-2 rounded-lg border-none cursor-pointer focus:ring-2 focus:ring-blue-300 shadow-sm outline-none ${getStatusColor(item.status || 'Novo 🆕')}`}
-                    >
-                      <option value="Novo 🆕">Novo 🆕</option>
-                      <option value="Monitorando 👀">Monitorando 👀</option>
-                      <option value="Retornar 📞">Retornar 📞</option>
-                      <option value="Fechado ✅">Fechado ✅</option>
-                      <option value="Desistiu ❌">Desistiu ❌</option>
-                    </select>
-                  </label>
+                    {supervisorNaVisaoEquipe ? (
+                      <p className={`w-fit rounded-lg px-3 py-2 text-xs font-black ${getStatusColor(item.status || 'Novo 🆕')}`}>
+                        {item.status || 'Novo 🆕'}
+                      </p>
+                    ) : (
+                      <select
+                        value={item.status || 'Novo 🆕'}
+                        onChange={(e) => alterarStatus(item.id, e.target.value)}
+                        className={`w-full text-xs font-black p-2 rounded-lg border-none cursor-pointer focus:ring-2 focus:ring-blue-300 shadow-sm outline-none ${getStatusColor(item.status || 'Novo 🆕')}`}
+                      >
+                        <option value="Novo 🆕">Novo 🆕</option>
+                        <option value="Monitorando 👀">Monitorando 👀</option>
+                        <option value="Retornar 📞">Retornar 📞</option>
+                        <option value="Fechado ✅">Fechado ✅</option>
+                        <option value="Desistiu ❌">Desistiu ❌</option>
+                      </select>
+                    )}
+                  </div>
 
                   <div>
                     <p className="text-[10px] font-bold uppercase text-slate-400">Status comercial</p>
@@ -372,21 +487,23 @@ function HistoricoContent() {
                 )}
 
                 <div className="mt-4 grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => abrirModalEdicao(item)}
-                    className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-black uppercase text-blue-700 transition hover:bg-blue-100"
-                  >
-                    Editar cotação
-                  </button>
+                  {!supervisorNaVisaoEquipe && (
+                    <button
+                      type="button"
+                      onClick={() => abrirModalEdicao(item)}
+                      className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-black uppercase text-blue-700 transition hover:bg-blue-100"
+                    >
+                      Editar cotação
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => abrirModalComercial(item)}
-                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black uppercase text-slate-700 transition hover:bg-slate-100"
+                    className={`rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black uppercase text-slate-700 transition hover:bg-slate-100 ${supervisorNaVisaoEquipe ? 'col-span-2' : ''}`}
                   >
                     Editar comercial
                   </button>
-                  {item.leadStatus === 'fechado' && (
+                  {!supervisorNaVisaoEquipe && item.leadStatus === 'fechado' && (
                     <button
                       type="button"
                       onClick={() => adicionarAosClientes(item)}
@@ -395,13 +512,15 @@ function HistoricoContent() {
                       Adicionar aos clientes
                     </button>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => excluirCotacao(item.id, item.cliente)}
-                    className="col-span-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-black uppercase text-red-600 transition hover:bg-red-100"
-                  >
-                    Excluir cotação
-                  </button>
+                  {!supervisorNaVisaoEquipe && (
+                    <button
+                      type="button"
+                      onClick={() => excluirCotacao(item.id, item.cliente)}
+                      className="col-span-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-black uppercase text-red-600 transition hover:bg-red-100"
+                    >
+                      Excluir cotação
+                    </button>
+                  )}
                 </div>
               </article>
             ))}
@@ -424,7 +543,17 @@ function HistoricoContent() {
               <tbody className="divide-y divide-gray-100">
                 {cotacoes.map((item) => (
                   <tr key={item.id} className="hover:bg-blue-50/30 transition duration-150">
-                    <td className="px-4 py-4 font-bold md:px-6">{item.cliente}</td>
+                    <td className="px-4 py-4 md:px-6">
+                      <div className="font-bold">{item.cliente}</div>
+                      <div className="mt-1 text-xs font-medium text-slate-400">
+                        {item.telefone || 'Sem telefone'}
+                      </div>
+                      {estaNaVisaoEquipe && (
+                        <div className="mt-1 text-xs font-medium text-slate-400">
+                          Agente: {formatarAgenteResponsavel(item)}
+                        </div>
+                      )}
+                    </td>
                     <td className="px-4 py-4 text-sm md:px-6">
                       <div className="font-medium">{item.origem} ➔ {item.destino}</div>
                       <div className={`text-[10px] font-black mt-1 inline-block px-1.5 py-0.5 rounded shadow-sm ${
@@ -438,17 +567,23 @@ function HistoricoContent() {
                       {item.valorTotal}
                     </td>
                     <td className="px-4 py-4 md:px-6">
-                      <select 
-                        value={item.status || 'Novo 🆕'} 
-                        onChange={(e) => alterarStatus(item.id, e.target.value)}
-                        className={`text-xs font-black p-2 rounded-lg border-none cursor-pointer focus:ring-2 focus:ring-blue-300 shadow-sm outline-none ${getStatusColor(item.status || 'Novo 🆕')}`}
-                      >
-                        <option value="Novo 🆕">Novo 🆕</option>
-                        <option value="Monitorando 👀">Monitorando 👀</option>
-                        <option value="Retornar 📞">Retornar 📞</option>
-                        <option value="Fechado ✅">Fechado ✅</option>
-                        <option value="Desistiu ❌">Desistiu ❌</option>
-                      </select>
+                      {supervisorNaVisaoEquipe ? (
+                        <span className={`inline-block rounded-lg px-3 py-2 text-xs font-black ${getStatusColor(item.status || 'Novo 🆕')}`}>
+                          {item.status || 'Novo 🆕'}
+                        </span>
+                      ) : (
+                        <select
+                          value={item.status || 'Novo 🆕'}
+                          onChange={(e) => alterarStatus(item.id, e.target.value)}
+                          className={`text-xs font-black p-2 rounded-lg border-none cursor-pointer focus:ring-2 focus:ring-blue-300 shadow-sm outline-none ${getStatusColor(item.status || 'Novo 🆕')}`}
+                        >
+                          <option value="Novo 🆕">Novo 🆕</option>
+                          <option value="Monitorando 👀">Monitorando 👀</option>
+                          <option value="Retornar 📞">Retornar 📞</option>
+                          <option value="Fechado ✅">Fechado ✅</option>
+                          <option value="Desistiu ❌">Desistiu ❌</option>
+                        </select>
+                      )}
                     </td>
                     <td className="px-4 py-4 text-xs md:px-6">
                       <div className="font-black uppercase text-slate-700">
@@ -475,7 +610,7 @@ function HistoricoContent() {
                       >
                         Editar comercial
                       </button>
-                      {item.leadStatus === 'fechado' && (
+                      {!supervisorNaVisaoEquipe && item.leadStatus === 'fechado' && (
                         <button
                           type="button"
                           onClick={() => adicionarAosClientes(item)}
@@ -489,20 +624,24 @@ function HistoricoContent() {
                       {formatarData(item.dataRegistro)}
                     </td>
                     <td className="px-4 py-4 text-center flex items-center justify-center gap-2 md:px-6">
-                      <button 
-                        onClick={() => abrirModalEdicao(item)}
-                        className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition duration-200"
-                        title="Editar Cotação"
-                      >
-                        ✏️
-                      </button>
-                      <button 
-                        onClick={() => excluirCotacao(item.id, item.cliente)}
-                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition duration-200"
-                        title="Excluir Cotação"
-                      >
-                        🗑️
-                      </button>
+                      {!supervisorNaVisaoEquipe && (
+                        <>
+                          <button 
+                            onClick={() => abrirModalEdicao(item)}
+                            className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition duration-200"
+                            title="Editar Cotação"
+                          >
+                            ✏️
+                          </button>
+                          <button 
+                            onClick={() => excluirCotacao(item.id, item.cliente)}
+                            className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition duration-200"
+                            title="Excluir Cotação"
+                          >
+                            🗑️
+                          </button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))}
