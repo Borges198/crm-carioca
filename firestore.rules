@@ -141,8 +141,8 @@ service cloud.firestore {
 
     match /cotacoes/{cotacaoId} {
       allow create: if isCreatingOwnAgencyDocument();
-      allow read: if (isAgent() && isOwner()) || ((isSupervisor() || isAdmin()) && isSameAgency());
-      allow update: if (isAgent() && isOwner() && preservesOwnership())
+      allow read: if (isApproved() && isOwner()) || ((isSupervisor() || isAdmin()) && isSameAgency());
+      allow update: if (isApproved() && isOwner() && preservesOwnership())
         || supervisorCanUpdateCommercialFields()
         || (isAdmin() && isSameAgency() && preservesOwnership());
       allow delete: if isAdmin() && isSameAgency();
@@ -150,8 +150,8 @@ service cloud.firestore {
 
     match /clientes/{clienteId} {
       allow create: if isCreatingOwnAgencyDocument();
-      allow read: if (isAgent() && isOwner()) || ((isSupervisor() || isAdmin()) && isSameAgency());
-      allow update: if (isAgent() && isOwner() && preservesOwnership())
+      allow read: if isApproved() && isOwner();
+      allow update: if (isApproved() && isOwner() && preservesOwnership())
         || (isAdmin() && isSameAgency() && preservesOwnership());
       allow delete: if isAdmin() && isSameAgency();
     }
