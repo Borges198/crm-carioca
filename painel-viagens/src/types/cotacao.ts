@@ -27,6 +27,8 @@ export type TrechoCotacaoInput = Omit<TrechoCotacao, 'tipo'>;
 export interface Cotacao {
   id: string;
   cliente: string;
+  telefone?: string;
+  telefoneNormalizado?: string;
   origem: string;
   destino: string;
   companhia: Companhia | string;
@@ -42,6 +44,9 @@ export interface Cotacao {
   dataIda: string;
   dataRegistro: FirestoreDate;
   ownerId?: string;
+  ownerName?: string;
+  ownerEmail?: string;
+  agencyId?: string;
   tipoVoo?: string;
   horaSaidaIda?: string;
   horaChegadaIda?: string;
@@ -56,4 +61,5 @@ export interface Cotacao {
 
 export type NovaCotacao = Omit<Cotacao, 'id'> & {
   ownerId: string;
+  agencyId: string;
 };

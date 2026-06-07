@@ -33,6 +33,22 @@ export async function listarCotacoesDoUsuario(userId: string) {
   })) as Cotacao[];
 }
 
+export async function listarCotacoesDaAgencia(agencyId: string) {
+  if (!agencyId) return [];
+
+  const q = query(
+    cotacoesCollection,
+    where('agencyId', '==', agencyId),
+    orderBy('dataRegistro', 'desc')
+  );
+  const querySnapshot = await getDocs(q);
+
+  return querySnapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data(),
+  })) as Cotacao[];
+}
+
 export async function listarNomesClientesDasCotacoes(userId: string) {
   const q = query(
     cotacoesCollection,

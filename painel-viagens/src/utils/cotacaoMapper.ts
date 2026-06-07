@@ -4,7 +4,12 @@ import { calcularDuracao } from './viagemUtils';
 
 interface MontarNovaCotacaoInput {
   ownerId: string;
+  ownerName?: string;
+  ownerEmail?: string;
+  agencyId: string;
   cliente: string;
+  telefone?: string;
+  telefoneNormalizado?: string;
   origem: string;
   destino: string;
   companhia: Companhia;
@@ -42,6 +47,7 @@ export function montarNovaCotacao(input: MontarNovaCotacaoInput): NovaCotacao {
     companhia: input.companhia,
     tipoVoo: input.tipoVoo,
     ownerId: input.ownerId,
+    agencyId: input.agencyId,
     dataIda: input.dataIda,
     horaSaidaIda: input.horaSaidaIda,
     horaChegadaIda: input.horaChegadaIda,
@@ -79,6 +85,18 @@ export function montarNovaCotacao(input: MontarNovaCotacaoInput): NovaCotacao {
   }
   if (typeof input.valorVolta !== 'undefined') {
     novaCotacao.valorVolta = input.valorVolta;
+  }
+  if (input.telefone) {
+    novaCotacao.telefone = input.telefone;
+  }
+  if (input.telefoneNormalizado) {
+    novaCotacao.telefoneNormalizado = input.telefoneNormalizado;
+  }
+  if (input.ownerName) {
+    novaCotacao.ownerName = input.ownerName;
+  }
+  if (input.ownerEmail) {
+    novaCotacao.ownerEmail = input.ownerEmail;
   }
 
   return novaCotacao;

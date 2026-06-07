@@ -15,14 +15,20 @@ import { montarNovaCotacao } from '../utils/cotacaoMapper';
 import { gerarMensagemWhatsApp } from '../utils/whatsappMessageUtils';
 import { extrairCandidatosSmartPaste, type SmartPasteCandidate, type SmartPasteCandidatesResult } from '../lib/smartPasteCandidatesUtils';
 import type { LeadStatus, ProdutoOfertado } from '../lib/leadUtils';
+import { DEFAULT_AGENCY_ID } from '../types';
 
 interface SmartPasteConferencia extends SmartPasteCandidatesResult {
   textoOrigemPreview: string;
 }
 
+function normalizarTelefone(telefone: string) {
+  return telefone.replace(/\D/g, '');
+}
+
 export default function Home() {
-  const { user } = useAuth();
+  const { user, accessProfile } = useAuth();
   const [cliente, setCliente] = useState('');
+  const [telefone, setTelefone] = useState('');
   const [origem, setOrigem] = useState('');
   const [destino, setDestino] = useState('');
   const [companhia, setCompanhia] = useState<Companhia>('Azul');
@@ -291,10 +297,17 @@ export default function Home() {
       
       const dataIdaFormatada = normalizarDataParaCotacao(dataIda);
       const dataVoltaFormatada = normalizarDataParaCotacao(dataVolta);
+      const telefoneCotacao = telefone.trim();
+      const telefoneNormalizado = normalizarTelefone(telefoneCotacao);
 
       const novaCotacao: NovaCotacao = montarNovaCotacao({
         ownerId: user.uid,
+        ownerName: user.displayName ?? undefined,
+        ownerEmail: user.email ?? undefined,
+        agencyId: accessProfile.agencyId ?? DEFAULT_AGENCY_ID,
         cliente,
+        telefone: telefoneCotacao,
+        telefoneNormalizado,
         origem,
         destino,
         companhia,
@@ -356,6 +369,7 @@ export default function Home() {
         <FormularioCotacao 
           userId={user?.uid}
           cliente={cliente} setCliente={setCliente}
+          telefone={telefone} setTelefone={setTelefone}
           origem={origem} setOrigem={setOrigem}
           destino={destino} setDestino={setDestino}
           companhia={companhia} setCompanhia={atualizarCompanhia}

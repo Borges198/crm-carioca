@@ -9,3 +9,11 @@ export type {
   TrechoCotacaoInput,
 } from './cotacao';
 export type { Cliente, NovoCliente } from './cliente';
+export type { UsuarioPerfil } from './usuario';
+export {
+  DEFAULT_AGENCY_ID,
+  DEFAULT_ACCESS_PROFILE,
+  buildAccessProfileFromUsuario,
+  isUserRole,
+} from './access';
+export type { AccessProfile, UserProfileStatus, UserRole } from './access';

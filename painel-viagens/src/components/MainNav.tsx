@@ -1,8 +1,12 @@
 "use client";
 
+import { signOut } from "firebase/auth";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import { auth } from "../lib/firebase";
+import AccessProfileBadge from "./AccessProfileBadge";
 
 const NAV_ITEMS = [
   { href: "/", label: "Nova cotação" },
@@ -13,7 +17,26 @@ const NAV_ITEMS = [
 
 export default function MainNav() {
   const pathname = usePathname();
-  const { user } = useAuth();
+  const router = useRouter();
+  const { user, accessProfile, isAdmin, profileLoading } = useAuth();
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const navItems = isAdmin || (!profileLoading && (accessProfile.role === "admin" || accessProfile.role === "supervisor"))
+    ? [...NAV_ITEMS, { href: "/usuarios", label: "Usuários" }]
+    : NAV_ITEMS;
+
+  async function handleLogout() {
+    setIsSigningOut(true);
+
+    try {
+      await signOut(auth);
+      router.push("/login");
+    } catch (error) {
+      console.error("Erro ao sair:", error);
+      alert("Não foi possível sair da conta. Tente novamente.");
+    } finally {
+      setIsSigningOut(false);
+    }
+  }
 
   if (!user || pathname === "/login") {
     return null;
@@ -31,26 +54,38 @@ export default function MainNav() {
           </p>
         </Link>
 
-        <nav aria-label="Navegação principal" className="flex gap-2 overflow-x-auto pb-1 lg:pb-0">
-          {NAV_ITEMS.map((item) => {
-            const isActive = pathname === item.href;
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+          <AccessProfileBadge />
 
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                aria-current={isActive ? "page" : undefined}
-                className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-bold transition ${
-                  isActive
-                    ? "bg-blue-600 text-white shadow-sm"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                }`}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
+          <nav aria-label="Navegação principal" className="flex gap-2 overflow-x-auto pb-1 lg:pb-0">
+            {navItems.map((item) => {
+              const isActive = pathname === item.href;
+
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  aria-current={isActive ? "page" : undefined}
+                  className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-bold transition ${
+                    isActive
+                      ? "bg-blue-600 text-white shadow-sm"
+                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+            <button
+              type="button"
+              onClick={handleLogout}
+              disabled={isSigningOut}
+              className="whitespace-nowrap rounded-lg px-3 py-2 text-sm font-bold text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isSigningOut ? "Saindo..." : "Sair"}
+            </button>
+          </nav>
+        </div>
       </div>
     </header>
   );
