@@ -145,7 +145,7 @@ service cloud.firestore {
       allow update: if (isApproved() && isOwner() && preservesOwnership())
         || supervisorCanUpdateCommercialFields()
         || (isAdmin() && isSameAgency() && preservesOwnership());
-      allow delete: if isAdmin() && isSameAgency();
+      allow delete: if (isAdmin() || isSupervisor()) && isSameAgency();
     }
 
     match /clientes/{clienteId} {
