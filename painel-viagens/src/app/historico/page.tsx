@@ -226,10 +226,13 @@ function HistoricoContent() {
 
     const nomeCliente = item.cliente?.trim() || 'Cliente sem nome';
     const confirmar = window.confirm(`Adicionar ${nomeCliente} à carteira de clientes?`);
-    if (!confirmar) return;
+    if (!confirmar) {
+      return;
+    }
 
     try {
       const clientesExistentes = await listarClientesDoUsuario(user.uid);
+
       const nomeNormalizado = normalizarNomeCliente(nomeCliente);
       const clienteDuplicado = clientesExistentes.some((cliente) => (
         normalizarNomeCliente(cliente.nome) === nomeNormalizado
@@ -303,10 +306,15 @@ function HistoricoContent() {
     item.ownerName || item.ownerEmail || 'Agente não identificado'
   );
 
+  const isBusinessClosed = (cotacao: Cotacao) => (
+    cotacao.leadStatus === 'fechado'
+    || (!cotacao.leadStatus && cotacao.status === 'Fechado ✅')
+  );
+
   const totalCotacoes = cotacoes.length;
-  const negociosFechados = cotacoes.filter(c => c.status === 'Fechado ✅').length;
+  const negociosFechados = cotacoes.filter(isBusinessClosed).length;
   const volumeVendas = cotacoes
-    .filter(c => c.status === 'Fechado ✅')
+    .filter(isBusinessClosed)
     .reduce((acc, curr) => acc + (curr.valorTotal || 0), 0);
 
   return (
