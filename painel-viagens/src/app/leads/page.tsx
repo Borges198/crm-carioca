@@ -5,17 +5,39 @@ import { Timestamp } from 'firebase/firestore';
 import AuthGuard from '../../components/AuthGuard';
 import EmptyState from '../../components/EmptyState';
 import { useAuth } from '../../context/AuthContext';
-import { listarCotacoesDoUsuario } from '../../services/cotacoesService';
+import { atualizarCotacao, listarCotacoesDoUsuario } from '../../services/cotacoesService';
 import type { Cotacao } from '../../types';
 import {
   LEAD_STATUS_OPTIONS,
+  PRODUTOS_OFERTADOS_OPTIONS,
   formatarLeadStatus,
   formatarProdutoOfertado,
   isLeadStatusAberto,
   type LeadStatus,
+  type ProdutoOfertado,
 } from '../../lib/leadUtils';
 
 type FiltroStatus = 'abertos' | 'sem_status' | LeadStatus;
+type CotacaoComHorariosVolta = Cotacao & {
+  horaSaidaVolta?: string;
+  horaChegadaVolta?: string;
+};
+
+interface LeadOpportunity {
+  id: string;
+  cotacoes: Cotacao[];
+  cliente: string;
+  telefone?: string;
+  origem: string;
+  destino: string;
+  dataIda?: string;
+  dataVolta?: string | null;
+  menorValor?: number;
+  maiorValor?: number;
+  cotacaoMaisRecente: Cotacao;
+  produtosOfertados: string[];
+  observacao?: string;
+}
 
 function formatarData(data: Timestamp | string | number | Date | undefined | null) {
   if (!data) return 'Data não informada';
@@ -33,11 +55,127 @@ function formatarValor(valor?: number | null) {
   });
 }
 
+function normalizarTexto(valor?: string | null) {
+  return (valor ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function normalizarTelefoneLocal(telefone?: string | null) {
+  return (telefone ?? '').replace(/\D/g, '');
+}
+
+function getTime(data: Cotacao['dataRegistro']) {
+  if (!data) return 0;
+  if (typeof (data as Timestamp).toDate === 'function') {
+    return (data as Timestamp).toDate().getTime();
+  }
+  const time = new Date(data as string | number | Date).getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
+function montarChaveOportunidade(cotacao: Cotacao) {
+  const identificadorCliente = cotacao.telefoneNormalizado
+    || normalizarTelefoneLocal(cotacao.telefone)
+    || normalizarTexto(cotacao.cliente);
+
+  return [
+    cotacao.ownerId ?? 'sem_owner',
+    identificadorCliente || 'sem_cliente',
+    normalizarTexto(cotacao.origem),
+    normalizarTexto(cotacao.destino),
+    normalizarTexto(cotacao.dataIda),
+    normalizarTexto(cotacao.dataVolta),
+  ].join('|');
+}
+
+function ordenarPorRegistroMaisRecente(a: Cotacao, b: Cotacao) {
+  return getTime(b.dataRegistro) - getTime(a.dataRegistro);
+}
+
+function agruparCotacoesEmOportunidades(cotacoes: Cotacao[]): LeadOpportunity[] {
+  const grupos = new Map<string, Cotacao[]>();
+
+  cotacoes.forEach((cotacao) => {
+    const chave = montarChaveOportunidade(cotacao);
+    const grupoAtual = grupos.get(chave) ?? [];
+    grupoAtual.push(cotacao);
+    grupos.set(chave, grupoAtual);
+  });
+
+  return Array.from(grupos.entries())
+    .map(([id, itens]) => {
+      const cotacoesOrdenadas = [...itens].sort(ordenarPorRegistroMaisRecente);
+      const cotacaoMaisRecente = cotacoesOrdenadas[0];
+      const valores = cotacoesOrdenadas
+        .map((cotacao) => cotacao.valorTotal)
+        .filter((valor): valor is number => typeof valor === 'number');
+      const produtosOfertados = Array.from(new Set(
+        cotacoesOrdenadas.flatMap((cotacao) => cotacao.produtosOfertados ?? [])
+      ));
+      const cotacaoComObservacao = cotacoesOrdenadas.find((cotacao) => cotacao.observacao?.trim());
+
+      return {
+        id,
+        cotacoes: cotacoesOrdenadas,
+        cliente: cotacaoMaisRecente.cliente,
+        telefone: cotacaoMaisRecente.telefone,
+        origem: cotacaoMaisRecente.origem,
+        destino: cotacaoMaisRecente.destino,
+        dataIda: cotacaoMaisRecente.dataIda,
+        dataVolta: cotacaoMaisRecente.dataVolta,
+        menorValor: valores.length > 0 ? Math.min(...valores) : undefined,
+        maiorValor: valores.length > 0 ? Math.max(...valores) : undefined,
+        cotacaoMaisRecente,
+        produtosOfertados,
+        observacao: cotacaoComObservacao?.observacao,
+      };
+    })
+    .sort((a, b) => ordenarPorRegistroMaisRecente(a.cotacaoMaisRecente, b.cotacaoMaisRecente));
+}
+
+function formatarCompanhias(cotacao: Cotacao) {
+  if (cotacao.companhiaIda || cotacao.companhiaVolta) {
+    const ida = cotacao.companhiaIda || cotacao.companhia;
+    const volta = cotacao.companhiaVolta;
+    return volta ? `Ida: ${ida} / Volta: ${volta}` : `Ida: ${ida}`;
+  }
+
+  return cotacao.companhia;
+}
+
+function formatarHorario(label: string, saida?: string, chegada?: string) {
+  if (!saida && !chegada) return null;
+  return `${label}: ${saida || '-'} → ${chegada || '-'}`;
+}
+
+function getHorariosVolta(cotacao: Cotacao) {
+  const cotacaoComVolta = cotacao as CotacaoComHorariosVolta;
+  return {
+    saida: cotacaoComVolta.horaSaidaVolta,
+    chegada: cotacaoComVolta.horaChegadaVolta,
+  };
+}
+
+function normalizarLeadStatus(status?: string): LeadStatus {
+  const statusEncontrado = LEAD_STATUS_OPTIONS.find((option) => option.value === status);
+  return statusEncontrado?.value ?? 'novo';
+}
+
+function normalizarProdutosOfertados(produtos?: string[]): ProdutoOfertado[] {
+  return (produtos ?? []).filter((produto): produto is ProdutoOfertado =>
+    PRODUTOS_OFERTADOS_OPTIONS.some((option) => option.value === produto)
+  );
+}
+
 function LeadsContent() {
   const { user } = useAuth();
   const [cotacoes, setCotacoes] = useState<Cotacao[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [filtroStatus, setFiltroStatus] = useState<FiltroStatus>('abertos');
+  const [modalComercialAberto, setModalComercialAberto] = useState(false);
+  const [cotacaoComercialEmEdicao, setCotacaoComercialEmEdicao] = useState<Cotacao | null>(null);
+  const [editLeadStatus, setEditLeadStatus] = useState<LeadStatus>('novo');
+  const [editProdutosOfertados, setEditProdutosOfertados] = useState<ProdutoOfertado[]>([]);
+  const [editObservacao, setEditObservacao] = useState('');
 
   useEffect(() => {
     if (!user) return;
@@ -86,9 +224,58 @@ function LeadsContent() {
     })
   ), [cotacoes, filtroStatus]);
 
+  const oportunidades = useMemo(() => (
+    agruparCotacoesEmOportunidades(cotacoesFiltradas)
+  ), [cotacoesFiltradas]);
+
   const totalAbertos = cotacoes.filter((cotacao) => isLeadStatusAberto(cotacao.leadStatus)).length;
   const totalPerdidos = cotacoes.filter((cotacao) => cotacao.leadStatus === 'perdido').length;
   const totalFechados = cotacoes.filter((cotacao) => cotacao.leadStatus === 'fechado').length;
+
+  const abrirModalComercial = (item: Cotacao) => {
+    setCotacaoComercialEmEdicao(item);
+    setEditLeadStatus(normalizarLeadStatus(item.leadStatus));
+    setEditProdutosOfertados(normalizarProdutosOfertados(item.produtosOfertados));
+    setEditObservacao(item.observacao ?? '');
+    setModalComercialAberto(true);
+  };
+
+  const fecharModalComercial = () => {
+    setModalComercialAberto(false);
+    setCotacaoComercialEmEdicao(null);
+  };
+
+  const alternarProdutoOfertado = (produto: ProdutoOfertado) => {
+    setEditProdutosOfertados((produtosAtuais) => (
+      produtosAtuais.includes(produto)
+        ? produtosAtuais.filter((item) => item !== produto)
+        : [...produtosAtuais, produto]
+    ));
+  };
+
+  const salvarEdicaoComercial = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cotacaoComercialEmEdicao) return;
+
+    const dadosComerciais = {
+      leadStatus: editLeadStatus,
+      produtosOfertados: editProdutosOfertados,
+      observacao: editObservacao.trim(),
+    };
+
+    try {
+      await atualizarCotacao(cotacaoComercialEmEdicao.id, dadosComerciais);
+
+      setCotacoes(prev => prev.map(item =>
+        item.id === cotacaoComercialEmEdicao.id ? { ...item, ...dadosComerciais } : item
+      ));
+
+      fecharModalComercial();
+    } catch (error) {
+      console.error('Erro ao salvar dados comerciais:', error);
+      alert('Erro ao salvar dados comerciais.');
+    }
+  };
 
   return (
     <main className="min-h-screen bg-gray-50 p-6 md:p-8">
@@ -151,41 +338,55 @@ function LeadsContent() {
           />
         ) : (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {cotacoesFiltradas.map((cotacao) => (
-              <article key={cotacao.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            {oportunidades.map((oportunidade) => (
+              <article key={oportunidade.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <h2 className="text-lg font-black text-slate-900">{cotacao.cliente}</h2>
+                    <h2 className="text-lg font-black text-slate-900">{oportunidade.cliente}</h2>
                     <p className="mt-1 text-xs font-semibold text-slate-500">
-                      {cotacao.telefone || 'Sem telefone'}
+                      {oportunidade.telefone || 'Sem telefone'}
                     </p>
                     <p className="mt-1 text-sm font-semibold text-slate-600">
-                      {cotacao.origem} &rarr; {cotacao.destino}
+                      {oportunidade.origem} &rarr; {oportunidade.destino}
                     </p>
                   </div>
                   <span className="w-fit rounded-full bg-blue-50 px-3 py-1 text-xs font-black uppercase text-blue-700">
-                    {formatarLeadStatus(cotacao.leadStatus)}
+                    {formatarLeadStatus(oportunidade.cotacaoMaisRecente.leadStatus)}
                   </span>
                 </div>
 
                 <div className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
                   <div>
-                    <p className="text-[10px] font-bold uppercase text-slate-400">Viagem</p>
-                    <p className="mt-1 font-bold text-slate-700">{formatarData(cotacao.dataIda)}</p>
+                    <p className="text-[10px] font-bold uppercase text-slate-400">Ida</p>
+                    <p className="mt-1 font-bold text-slate-700">{formatarData(oportunidade.dataIda)}</p>
+                    {oportunidade.dataVolta && (
+                      <p className="mt-1 text-xs font-semibold text-slate-500">
+                        Volta: {formatarData(oportunidade.dataVolta)}
+                      </p>
+                    )}
                   </div>
                   <div>
-                    <p className="text-[10px] font-bold uppercase text-slate-400">Registro</p>
-                    <p className="mt-1 font-bold text-slate-700">{formatarData(cotacao.dataRegistro)}</p>
+                    <p className="text-[10px] font-bold uppercase text-slate-400">Registro recente</p>
+                    <p className="mt-1 font-bold text-slate-700">{formatarData(oportunidade.cotacaoMaisRecente.dataRegistro)}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] font-bold uppercase text-slate-400">Valor</p>
-                    <p className="mt-1 font-black text-green-700">{formatarValor(cotacao.valorTotal)}</p>
+                    <p className="text-[10px] font-bold uppercase text-slate-400">Valores</p>
+                    <p className="mt-1 font-black text-green-700">
+                      {formatarValor(oportunidade.menorValor)}
+                      {typeof oportunidade.maiorValor === 'number' && oportunidade.maiorValor !== oportunidade.menorValor
+                        ? ` a ${formatarValor(oportunidade.maiorValor)}`
+                        : ''}
+                    </p>
                   </div>
                 </div>
 
-                {cotacao.produtosOfertados && cotacao.produtosOfertados.length > 0 && (
+                <p className="mt-4 w-fit rounded-lg bg-slate-50 px-3 py-2 text-xs font-black uppercase text-slate-600">
+                  {oportunidade.cotacoes.length} {oportunidade.cotacoes.length === 1 ? 'cotação relacionada' : 'cotações relacionadas'}
+                </p>
+
+                {oportunidade.produtosOfertados.length > 0 && (
                   <div className="mt-4 flex flex-wrap gap-2">
-                    {cotacao.produtosOfertados.map((produto) => (
+                    {oportunidade.produtosOfertados.map((produto) => (
                       <span key={produto} className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600">
                         {formatarProdutoOfertado(produto)}
                       </span>
@@ -193,16 +394,121 @@ function LeadsContent() {
                   </div>
                 )}
 
-                {cotacao.observacao && (
+                {oportunidade.observacao && (
                   <p className="mt-4 rounded-lg bg-slate-50 p-3 text-sm font-medium text-slate-600">
-                    {cotacao.observacao}
+                    {oportunidade.observacao}
                   </p>
                 )}
+
+                <div className="mt-5 space-y-3 border-t border-slate-100 pt-4">
+                  {oportunidade.cotacoes.map((cotacao) => {
+                    const horarioIda = formatarHorario('Ida', cotacao.horaSaidaIda, cotacao.horaChegadaIda);
+                    const horariosVolta = getHorariosVolta(cotacao);
+                    const horarioVolta = formatarHorario(
+                      'Volta',
+                      horariosVolta.saida,
+                      horariosVolta.chegada
+                    );
+
+                    return (
+                      <div key={cotacao.id} className="rounded-lg border border-slate-100 bg-white p-3">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <p className="text-sm font-black text-slate-800">{formatarCompanhias(cotacao)}</p>
+                            <div className="mt-1 space-y-0.5 text-xs font-semibold text-slate-500">
+                              {horarioIda && <p>{horarioIda}</p>}
+                              {horarioVolta && <p>{horarioVolta}</p>}
+                              {!horarioIda && !horarioVolta && <p>Horários não informados</p>}
+                            </div>
+                          </div>
+                          <div className="sm:text-right">
+                            <p className="text-sm font-black text-green-700">{formatarValor(cotacao.valorTotal)}</p>
+                            <p className="mt-1 text-[11px] font-black uppercase text-blue-700">
+                              {formatarLeadStatus(cotacao.leadStatus)}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => abrirModalComercial(cotacao)}
+                            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black uppercase text-slate-700 transition hover:bg-slate-100"
+                          >
+                            Editar comercial
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </article>
             ))}
           </div>
         )}
       </div>
+
+      {modalComercialAberto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+            <h2 className="mb-1 text-xl font-bold text-slate-800">Editar comercial</h2>
+            <p className="mb-5 text-sm font-medium text-slate-500">
+              {cotacaoComercialEmEdicao?.cliente}
+            </p>
+
+            <form onSubmit={salvarEdicaoComercial} className="flex flex-col gap-4">
+              <label className="block">
+                <span className="text-sm font-semibold text-slate-600">Status comercial</span>
+                <select
+                  value={editLeadStatus}
+                  onChange={(e) => setEditLeadStatus(e.target.value as LeadStatus)}
+                  className="mt-1 w-full rounded-lg border bg-white px-4 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {LEAD_STATUS_OPTIONS.map((status) => (
+                    <option key={status.value} value={status.value}>{status.label}</option>
+                  ))}
+                </select>
+              </label>
+
+              <div>
+                <span className="text-sm font-semibold text-slate-600">Produtos ofertados</span>
+                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {PRODUTOS_OFERTADOS_OPTIONS.map((produto) => (
+                    <label key={produto.value} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={editProdutosOfertados.includes(produto.value)}
+                        onChange={() => alternarProdutoOfertado(produto.value)}
+                        className="h-4 w-4 rounded border-slate-300 text-blue-600"
+                      />
+                      <span>{produto.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <label className="block">
+                <span className="text-sm font-semibold text-slate-600">Observação comercial</span>
+                <textarea
+                  value={editObservacao}
+                  onChange={(e) => setEditObservacao(e.target.value)}
+                  className="mt-1 min-h-28 w-full rounded-lg border px-4 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Observações internas sobre o acompanhamento"
+                />
+              </label>
+
+              <div className="mt-2 flex justify-end gap-3">
+                <button type="button" onClick={fecharModalComercial} className="rounded-lg px-4 py-2 font-semibold text-slate-500 hover:bg-slate-100">
+                  Cancelar
+                </button>
+                <button type="submit" className="rounded-lg bg-blue-600 px-6 py-2 font-bold text-white shadow-md hover:bg-blue-700">
+                  Salvar comercial
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
