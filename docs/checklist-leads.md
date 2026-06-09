@@ -16,6 +16,7 @@ Primeira implementacao inicial ja realizada:
 - `/leads` como visao interna baseada em `cotacoes`, sem colecao nova;
 - status abertos aparecem por padrao em `/leads`;
 - `fechado` e `perdido` nao aparecem por padrao em `/leads`.
+- agrupamento visual de cotacoes relacionadas em oportunidades comerciais no `/leads`;
 - acao manual `Adicionar aos clientes` no `/historico` para cotacoes com `leadStatus = "fechado"`;
 - criacao de cliente com confirmacao humana, preservando `ownerId`;
 - deduplicacao inicial basica por nome normalizado.
@@ -26,7 +27,7 @@ Primeira implementacao inicial ja realizada:
 
 `/historico` continua sendo a base de registro das cotacoes. Toda cotacao salva deve permanecer consultavel ali, independentemente de virar lead, ser perdida ou ser fechada.
 
-`/leads` sera a area operacional para oportunidades em andamento. Ela deve priorizar cotacoes que ainda exigem acompanhamento comercial.
+`/leads` sera a area operacional para oportunidades em andamento. Ela deve priorizar oportunidades comerciais que ainda exigem acompanhamento, agrupando cotacoes relacionadas quando fizer sentido para reduzir ruido visual.
 
 `/clientes` representa compradores reais. Um cliente real e:
 
@@ -74,7 +75,7 @@ Campo ainda planejado para evolucao posterior:
 
 ## Regra para `/leads`
 
-Status: primeira versao implementada.
+Status: primeira versao implementada e agrupamento visual de oportunidades comerciais adicionado.
 
 Mostrar como oportunidades abertas:
 
@@ -88,7 +89,45 @@ Nao tratar `fechado` como lead aberto.
 
 `perdido` pode continuar acessivel via filtro, mas nao deve aparecer como prioridade principal da tela.
 
-`/leads` e uma visao comercial interna baseada na colecao `cotacoes`. Nao existe colecao nova de leads nesta etapa.
+`/leads` e uma visao comercial interna baseada na colecao `cotacoes`. Nao existe colecao nova de leads ou oportunidades nesta etapa.
+
+`/historico` continua sendo o registro detalhado de cotacoes, com uma linha ou card por cotacao. A evolucao do `/leads` nao muda esse contrato: toda cotacao individual deve continuar consultavel no historico.
+
+No `/leads`, uma oportunidade comercial pode conter varias cotacoes relacionadas. Isso cobre o caso em que o mesmo cliente pede varias opcoes para o mesmo percurso e a mesma data, mas com horarios, companhias ou valores diferentes. Essas variacoes devem aparecer como opcoes dentro da mesma oportunidade comercial, e nao como oportunidades separadas.
+
+O agrupamento atual e apenas visual/frontend. A tela continua buscando cotacoes como antes, aplica o filtro de status e somente depois agrupa as cotacoes filtradas em oportunidades. Nao houve criacao de colecao nova no Firestore, migracao de dados ou alteracao de Firestore Rules.
+
+### Chave atual de agrupamento de oportunidades
+
+A chave de agrupamento usa:
+
+- `ownerId`;
+- `telefoneNormalizado`, quando existir;
+- telefone normalizado localmente, quando nao houver `telefoneNormalizado`;
+- cliente normalizado, quando nao houver telefone;
+- `origem`;
+- `destino`;
+- `dataIda`;
+- `dataVolta`.
+
+A chave de agrupamento nao usa:
+
+- `companhia`;
+- `companhiaIda`;
+- `companhiaVolta`;
+- horarios;
+- `valorTotal`;
+- `leadStatus`;
+- `observacao`.
+
+Companhias, horarios, valores, status e observacoes continuam sendo dados da cotacao individual. As acoes comerciais tambem continuam acontecendo na cotacao individual, nao no grupo. Assim, editar status comercial, produtos ofertados ou observacao deve atualizar a cotacao especifica selecionada dentro da oportunidade.
+
+### Limitacoes conhecidas do agrupamento visual
+
+- cotacoes antigas ou incompletas podem agrupar demais se faltarem telefone, cliente, rota e datas;
+- os indicadores do topo continuam contando cotacoes, nao oportunidades;
+- `/leads` ainda e individual por usuario, nao visao de equipe;
+- ainda nao existe entidade persistida de oportunidade comercial.
 
 ## Regra para `/clientes`
 
@@ -169,12 +208,14 @@ Status: implementada em primeira versao.
 
 ### Fase 4: tela `/leads`
 
-Status: implementada em primeira versao.
+Status: implementada em primeira versao e evoluida com agrupamento visual de oportunidades.
 
 - criar visao filtrada para oportunidades abertas;
 - priorizar status em andamento;
 - permitir filtro para `perdido`;
-- excluir `fechado` da visao principal de leads abertos.
+- excluir `fechado` da visao principal de leads abertos;
+- agrupar cotacoes relacionadas em oportunidades comerciais apenas na interface;
+- manter as acoes em nivel de cotacao individual.
 
 ### Fase 5: conversao para cliente real
 
@@ -191,4 +232,8 @@ Status: implementada em primeira versao.
 - avaliar vinculo formal `cotacaoOrigemId` entre cliente e cotacoes fechadas;
 - avaliar captura de telefone no fluxo de cotacao;
 - adicionar metricas de conversao;
-- revisar filtros comerciais por produto ofertado e status.
+- revisar filtros comerciais por produto ofertado e status;
+- adicionar indicador de total de oportunidades;
+- avaliar visao de equipe em `/leads` para supervisor;
+- avaliar criacao futura de uma entidade ou colecao `oportunidades`, se a visao agrupada precisar deixar de ser apenas visual;
+- adicionar filtros por cliente, rota, produto e status.
