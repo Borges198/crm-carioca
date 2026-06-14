@@ -615,14 +615,14 @@ function HistoricoContent() {
                     <td className="px-4 py-4 text-center flex items-center justify-center gap-2 md:px-6">
                       {!supervisorNaVisaoEquipe && (
                         <>
-                          <button 
+                          <button
                             onClick={() => abrirModalEdicao(item)}
                             className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition duration-200"
                             title="Editar Cotação"
                           >
                             ✏️
                           </button>
-                          <button 
+                          <button
                             onClick={() => excluirCotacao(item.id, item.cliente)}
                             className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition duration-200"
                             title="Excluir Cotação"
