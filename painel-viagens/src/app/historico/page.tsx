@@ -226,10 +226,13 @@ function HistoricoContent() {
 
     const nomeCliente = item.cliente?.trim() || 'Cliente sem nome';
     const confirmar = window.confirm(`Adicionar ${nomeCliente} à carteira de clientes?`);
-    if (!confirmar) return;
+    if (!confirmar) {
+      return;
+    }
 
     try {
       const clientesExistentes = await listarClientesDoUsuario(user.uid);
+
       const nomeNormalizado = normalizarNomeCliente(nomeCliente);
       const clienteDuplicado = clientesExistentes.some((cliente) => (
         normalizarNomeCliente(cliente.nome) === nomeNormalizado
@@ -257,18 +260,6 @@ function HistoricoContent() {
     }
   };
 
-  const alterarStatus = async (id: string, novoStatus: string) => {
-    try {
-      await atualizarCotacao(id, { status: novoStatus });
-      
-      setCotacoes(prev => prev.map(item => 
-        item.id === id ? { ...item, status: novoStatus } : item
-      ));
-    } catch (error) {
-      console.error("Erro ao atualizar status:", error);
-    }
-  };
-
   const excluirCotacao = async (id: string, nomeCliente: string) => {
     const confirmar = window.confirm(`Tem certeza que deseja excluir a cotação do(a) ${nomeCliente}?`);
     if (confirmar) {
@@ -278,6 +269,27 @@ function HistoricoContent() {
       } catch (error) {
         console.error("Erro ao excluir cotação:", error);
       }
+    }
+  };
+
+  const getDerivedSalesStatus = (cotacao: Cotacao) => {
+    if (!cotacao.leadStatus) {
+      return cotacao.status || 'Novo 🆕';
+    }
+
+    switch (cotacao.leadStatus) {
+      case 'fechado':
+        return 'Fechado ✅';
+      case 'perdido':
+        return 'Desistiu ❌';
+      case 'aguardando_cliente':
+      case 'orcamento_enviado':
+        return 'Retornar 📞';
+      case 'em_monitoramento':
+      case 'negociacao':
+        return 'Monitorando 👀';
+      default:
+        return 'Novo 🆕';
     }
   };
 
@@ -303,10 +315,15 @@ function HistoricoContent() {
     item.ownerName || item.ownerEmail || 'Agente não identificado'
   );
 
+  const isBusinessClosed = (cotacao: Cotacao) => (
+    cotacao.leadStatus === 'fechado'
+    || (!cotacao.leadStatus && cotacao.status === 'Fechado ✅')
+  );
+
   const totalCotacoes = cotacoes.length;
-  const negociosFechados = cotacoes.filter(c => c.status === 'Fechado ✅').length;
+  const negociosFechados = cotacoes.filter(isBusinessClosed).length;
   const volumeVendas = cotacoes
-    .filter(c => c.status === 'Fechado ✅')
+    .filter(isBusinessClosed)
     .reduce((acc, curr) => acc + (curr.valorTotal || 0), 0);
 
   return (
@@ -443,23 +460,9 @@ function HistoricoContent() {
                 <div className="mt-4 grid grid-cols-1 gap-3">
                   <div>
                     <span className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Status da venda</span>
-                    {supervisorNaVisaoEquipe ? (
-                      <p className={`w-fit rounded-lg px-3 py-2 text-xs font-black ${getStatusColor(item.status || 'Novo 🆕')}`}>
-                        {item.status || 'Novo 🆕'}
-                      </p>
-                    ) : (
-                      <select
-                        value={item.status || 'Novo 🆕'}
-                        onChange={(e) => alterarStatus(item.id, e.target.value)}
-                        className={`w-full text-xs font-black p-2 rounded-lg border-none cursor-pointer focus:ring-2 focus:ring-blue-300 shadow-sm outline-none ${getStatusColor(item.status || 'Novo 🆕')}`}
-                      >
-                        <option value="Novo 🆕">Novo 🆕</option>
-                        <option value="Monitorando 👀">Monitorando 👀</option>
-                        <option value="Retornar 📞">Retornar 📞</option>
-                        <option value="Fechado ✅">Fechado ✅</option>
-                        <option value="Desistiu ❌">Desistiu ❌</option>
-                      </select>
-                    )}
+                    <p className={`w-fit rounded-lg px-3 py-2 text-xs font-black ${getStatusColor(getDerivedSalesStatus(item))}`}>
+                      {getDerivedSalesStatus(item)}
+                    </p>
                   </div>
 
                   <div>
@@ -567,23 +570,9 @@ function HistoricoContent() {
                       {item.valorTotal}
                     </td>
                     <td className="px-4 py-4 md:px-6">
-                      {supervisorNaVisaoEquipe ? (
-                        <span className={`inline-block rounded-lg px-3 py-2 text-xs font-black ${getStatusColor(item.status || 'Novo 🆕')}`}>
-                          {item.status || 'Novo 🆕'}
-                        </span>
-                      ) : (
-                        <select
-                          value={item.status || 'Novo 🆕'}
-                          onChange={(e) => alterarStatus(item.id, e.target.value)}
-                          className={`text-xs font-black p-2 rounded-lg border-none cursor-pointer focus:ring-2 focus:ring-blue-300 shadow-sm outline-none ${getStatusColor(item.status || 'Novo 🆕')}`}
-                        >
-                          <option value="Novo 🆕">Novo 🆕</option>
-                          <option value="Monitorando 👀">Monitorando 👀</option>
-                          <option value="Retornar 📞">Retornar 📞</option>
-                          <option value="Fechado ✅">Fechado ✅</option>
-                          <option value="Desistiu ❌">Desistiu ❌</option>
-                        </select>
-                      )}
+                      <span className={`inline-block rounded-lg px-3 py-2 text-xs font-black ${getStatusColor(getDerivedSalesStatus(item))}`}>
+                        {getDerivedSalesStatus(item)}
+                      </span>
                     </td>
                     <td className="px-4 py-4 text-xs md:px-6">
                       <div className="font-black uppercase text-slate-700">
@@ -626,14 +615,14 @@ function HistoricoContent() {
                     <td className="px-4 py-4 text-center flex items-center justify-center gap-2 md:px-6">
                       {!supervisorNaVisaoEquipe && (
                         <>
-                          <button 
+                          <button
                             onClick={() => abrirModalEdicao(item)}
                             className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition duration-200"
                             title="Editar Cotação"
                           >
                             ✏️
                           </button>
-                          <button 
+                          <button
                             onClick={() => excluirCotacao(item.id, item.cliente)}
                             className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition duration-200"
                             title="Excluir Cotação"

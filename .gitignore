@@ -5,6 +5,7 @@ __pycache__/
 
 # Chaves e Senhas
 firebase_credentials.json
+firebase_credentials.txt
 .env
 .env.local
 
