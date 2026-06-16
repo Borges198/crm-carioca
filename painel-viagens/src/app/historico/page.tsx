@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Timestamp } from 'firebase/firestore';
 import AuthGuard from '../../components/AuthGuard';
 import EmptyState from '../../components/EmptyState';
+import SearchInput from '../../components/SearchInput';
 import { useAuth } from '../../context/AuthContext';
 import { criarCliente, listarClientesDoUsuario } from '../../services/clientesService';
 import {
@@ -13,7 +14,7 @@ import {
   listarCotacoesDoUsuario,
 } from '../../services/cotacoesService';
 import { DEFAULT_AGENCY_ID } from '../../types';
-import type { Cotacao, NovoCliente } from '../../types';
+import type { Cotacao } from '../../types';
 import {
   LEAD_STATUS_OPTIONS,
   PRODUTOS_OFERTADOS_OPTIONS,
@@ -22,6 +23,8 @@ import {
   type LeadStatus,
   type ProdutoOfertado,
 } from '../../lib/leadUtils';
+import { converterCotacaoFechadaEmCliente } from '../../utils/clienteConversionUtils';
+import { filterBySearch, normalizeSearchText } from '../../utils/searchUtils';
 
 type VisaoHistorico = 'minhas' | 'equipe';
 
@@ -39,6 +42,7 @@ function HistoricoContent() {
   const [carregando, setCarregando] = useState(true);
   const [erroCarregamento, setErroCarregamento] = useState('');
   const [visaoSelecionada, setVisaoSelecionada] = useState<VisaoHistorico>('minhas');
+  const [termoPesquisa, setTermoPesquisa] = useState('');
 
   // Estados para o Modal de Edição de Cotação
   const [modalEditAberto, setModalEditAberto] = useState(false);
@@ -203,16 +207,6 @@ function HistoricoContent() {
     }
   };
 
-  const normalizarNomeCliente = (nome: string) => (
-    nome.trim().toLowerCase().replace(/\s+/g, ' ')
-  );
-
-  const montarResumoViagem = (item: Cotacao) => {
-    const rota = `${item.origem} → ${item.destino}`;
-    if (!item.dataIda) return rota;
-    return `${rota} | ${formatarData(item.dataIda)}`;
-  };
-
   const adicionarAosClientes = async (item: Cotacao) => {
     if (!user) {
       alert("Você precisa estar logado para adicionar um cliente.");
@@ -232,27 +226,30 @@ function HistoricoContent() {
 
     try {
       const clientesExistentes = await listarClientesDoUsuario(user.uid);
+      const resultado = await converterCotacaoFechadaEmCliente({
+        cotacao: item,
+        userId: user.uid,
+        agencyId: accessProfile.agencyId ?? DEFAULT_AGENCY_ID,
+        formatarData,
+        clientesExistentes,
+        criarCliente,
+      });
 
-      const nomeNormalizado = normalizarNomeCliente(nomeCliente);
-      const clienteDuplicado = clientesExistentes.some((cliente) => (
-        normalizarNomeCliente(cliente.nome) === nomeNormalizado
-      ));
-
-      if (clienteDuplicado) {
+      if (resultado.status === 'duplicate') {
         alert("Este cliente já existe na carteira.");
         return;
       }
 
-      const novoCliente: NovoCliente = {
-        nome: nomeCliente,
-        origemLead: 'Cotação fechada',
-        primeiraViagem: montarResumoViagem(item),
-        ownerId: user.uid,
-        agencyId: accessProfile.agencyId ?? DEFAULT_AGENCY_ID,
-        dataCadastro: new Date(),
-      };
+      if (resultado.status === 'not_closed') {
+        alert("Somente cotações marcadas como fechado podem virar cliente.");
+        return;
+      }
 
-      await criarCliente(novoCliente);
+      if (resultado.status === 'missing_agency') {
+        alert("Não foi possível identificar a agência do seu perfil. Aguarde o carregamento do perfil e tente novamente.");
+        return;
+      }
+
       alert("Cliente adicionado à carteira com sucesso.");
     } catch (error) {
       console.error("Erro ao adicionar cliente a partir da cotação:", error);
@@ -325,6 +322,28 @@ function HistoricoContent() {
   const volumeVendas = cotacoes
     .filter(isBusinessClosed)
     .reduce((acc, curr) => acc + (curr.valorTotal || 0), 0);
+  const termoPesquisaNormalizado = normalizeSearchText(termoPesquisa);
+  const cotacoesPesquisadas = useMemo(() => (
+    filterBySearch(cotacoes, termoPesquisa, (item) => [
+      item.cliente,
+      item.telefone,
+      item.telefoneNormalizado,
+      item.origem,
+      item.destino,
+      item.companhia,
+      item.companhiaIda,
+      item.companhiaVolta,
+      item.ownerName,
+      item.ownerEmail,
+      item.leadStatus,
+      item.status,
+      ...(item.produtosOfertados ?? []),
+      item.observacao,
+      item.dataIda,
+      item.dataVolta,
+      item.valorTotal,
+    ])
+  ), [cotacoes, termoPesquisa]);
 
   return (
     <main className="min-h-screen bg-gray-50 p-4 sm:p-6 md:p-8">
@@ -404,6 +423,22 @@ function HistoricoContent() {
           </div>
         </div>
 
+        {!carregando && cotacoes.length > 0 && (
+          <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <SearchInput
+              value={termoPesquisa}
+              onChange={setTermoPesquisa}
+              placeholder="Pesquisar por cliente, telefone, rota, companhia ou status"
+              ariaLabel="Pesquisar cotações"
+            />
+            <p className="mt-3 text-xs font-semibold text-slate-500">
+              {termoPesquisaNormalizado
+                ? `${cotacoesPesquisadas.length} ${cotacoesPesquisadas.length === 1 ? 'resultado encontrado' : 'resultados encontrados'} em ${cotacoes.length} ${cotacoes.length === 1 ? 'cotação' : 'cotações'}`
+                : `${cotacoes.length} ${cotacoes.length === 1 ? 'cotação carregada' : 'cotações carregadas'}`}
+            </p>
+          </div>
+        )}
+
         {carregando ? (
           <div className="flex justify-center items-center py-20">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
@@ -417,10 +452,15 @@ function HistoricoContent() {
               { href: '/leads', label: 'Ver leads', variant: 'secondary' },
             ]}
           />
+        ) : cotacoesPesquisadas.length === 0 ? (
+          <EmptyState
+            title={`Nenhum resultado encontrado para "${termoPesquisa.trim()}".`}
+            description="Tente pesquisar por cliente, telefone, rota, companhia ou status."
+          />
         ) : (
           <>
           <div className="space-y-4 md:hidden">
-            {cotacoes.map((item) => (
+            {cotacoesPesquisadas.map((item) => (
               <article key={item.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -544,7 +584,7 @@ function HistoricoContent() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {cotacoes.map((item) => (
+                {cotacoesPesquisadas.map((item) => (
                   <tr key={item.id} className="hover:bg-blue-50/30 transition duration-150">
                     <td className="px-4 py-4 md:px-6">
                       <div className="font-bold">{item.cliente}</div>

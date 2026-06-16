@@ -4,8 +4,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { Timestamp } from 'firebase/firestore';
 import AuthGuard from '../../components/AuthGuard';
 import EmptyState from '../../components/EmptyState';
+import SearchInput from '../../components/SearchInput';
 import { useAuth } from '../../context/AuthContext';
+import { criarCliente, listarClientesDoUsuario } from '../../services/clientesService';
 import { atualizarCotacao, listarCotacoesDoUsuario } from '../../services/cotacoesService';
+import { DEFAULT_AGENCY_ID } from '../../types';
 import type { Cotacao } from '../../types';
 import {
   LEAD_STATUS_OPTIONS,
@@ -16,6 +19,8 @@ import {
   type LeadStatus,
   type ProdutoOfertado,
 } from '../../lib/leadUtils';
+import { converterCotacaoFechadaEmCliente } from '../../utils/clienteConversionUtils';
+import { filterBySearch, normalizeSearchText } from '../../utils/searchUtils';
 
 type FiltroStatus = 'abertos' | 'sem_status' | LeadStatus;
 type CotacaoComHorariosVolta = Cotacao & {
@@ -167,10 +172,13 @@ function normalizarProdutosOfertados(produtos?: string[]): ProdutoOfertado[] {
 }
 
 function LeadsContent() {
-  const { user } = useAuth();
+  const { user, accessProfile, profileLoading } = useAuth();
   const [cotacoes, setCotacoes] = useState<Cotacao[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [filtroStatus, setFiltroStatus] = useState<FiltroStatus>('abertos');
+  const [termoPesquisa, setTermoPesquisa] = useState('');
+  const [oportunidadeEmConversaoId, setOportunidadeEmConversaoId] = useState<string | null>(null);
+  const [clientesAdicionadosIds, setClientesAdicionadosIds] = useState<string[]>([]);
   const [modalComercialAberto, setModalComercialAberto] = useState(false);
   const [cotacaoComercialEmEdicao, setCotacaoComercialEmEdicao] = useState<Cotacao | null>(null);
   const [editLeadStatus, setEditLeadStatus] = useState<LeadStatus>('novo');
@@ -228,6 +236,32 @@ function LeadsContent() {
     agruparCotacoesEmOportunidades(cotacoesFiltradas)
   ), [cotacoesFiltradas]);
 
+  const termoPesquisaNormalizado = normalizeSearchText(termoPesquisa);
+  const oportunidadesPesquisadas = useMemo(() => (
+    filterBySearch(oportunidades, termoPesquisa, (oportunidade) => [
+      oportunidade.cliente,
+      oportunidade.telefone,
+      oportunidade.origem,
+      oportunidade.destino,
+      oportunidade.dataIda,
+      oportunidade.dataVolta,
+      oportunidade.cotacaoMaisRecente.leadStatus,
+      oportunidade.menorValor,
+      oportunidade.maiorValor,
+      ...oportunidade.produtosOfertados,
+      oportunidade.observacao,
+      ...oportunidade.cotacoes.flatMap((cotacao) => [
+        cotacao.companhia,
+        cotacao.companhiaIda,
+        cotacao.companhiaVolta,
+        ...(cotacao.produtosOfertados ?? []),
+        cotacao.observacao,
+        cotacao.leadStatus,
+        cotacao.valorTotal,
+      ]),
+    ])
+  ), [oportunidades, termoPesquisa]);
+
   const totalAbertos = cotacoes.filter((cotacao) => isLeadStatusAberto(cotacao.leadStatus)).length;
   const totalPerdidos = cotacoes.filter((cotacao) => cotacao.leadStatus === 'perdido').length;
   const totalFechados = cotacoes.filter((cotacao) => cotacao.leadStatus === 'fechado').length;
@@ -277,6 +311,65 @@ function LeadsContent() {
     }
   };
 
+  const adicionarOportunidadeAosClientes = async (oportunidade: LeadOpportunity) => {
+    if (!user) {
+      alert('Você precisa estar logado para adicionar um cliente.');
+      return;
+    }
+
+    const cotacaoReferencia = oportunidade.cotacaoMaisRecente;
+    if (cotacaoReferencia.leadStatus !== 'fechado') {
+      alert('Somente oportunidades marcadas como fechado podem virar cliente.');
+      return;
+    }
+
+    const nomeCliente = cotacaoReferencia.cliente?.trim() || 'Cliente sem nome';
+    const confirmar = window.confirm(`Adicionar ${nomeCliente} à carteira de clientes?`);
+    if (!confirmar) {
+      return;
+    }
+
+    setOportunidadeEmConversaoId(oportunidade.id);
+
+    try {
+      const clientesExistentes = await listarClientesDoUsuario(user.uid);
+      const agencyIdParaCriacao = profileLoading
+        ? ''
+        : accessProfile.agencyId ?? DEFAULT_AGENCY_ID;
+      const resultado = await converterCotacaoFechadaEmCliente({
+        cotacao: cotacaoReferencia,
+        userId: user.uid,
+        agencyId: agencyIdParaCriacao,
+        formatarData,
+        clientesExistentes,
+        criarCliente,
+      });
+
+      if (resultado.status === 'duplicate') {
+        alert('Este cliente já existe na carteira.');
+        return;
+      }
+
+      if (resultado.status === 'not_closed') {
+        alert('Somente oportunidades marcadas como fechado podem virar cliente.');
+        return;
+      }
+
+      if (resultado.status === 'missing_agency') {
+        alert('Não foi possível identificar a agência do seu perfil. Aguarde o carregamento do perfil e tente novamente.');
+        return;
+      }
+
+      setClientesAdicionadosIds((ids) => [...ids, oportunidade.id]);
+      alert('Cliente adicionado à carteira com sucesso.');
+    } catch (error) {
+      console.error('Erro ao adicionar cliente a partir da oportunidade:', error);
+      alert('Erro ao adicionar cliente.');
+    } finally {
+      setOportunidadeEmConversaoId(null);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-gray-50 p-6 md:p-8">
       <div className="mx-auto max-w-7xl">
@@ -307,20 +400,38 @@ function LeadsContent() {
         </div>
 
         <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <label className="block max-w-xs">
-            <span className="mb-1 block text-xs font-bold uppercase text-slate-500">Filtro de status</span>
-            <select
-              value={filtroStatus}
-              onChange={(e) => setFiltroStatus(e.target.value as FiltroStatus)}
-              className="w-full rounded-lg border bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="abertos">Leads abertos</option>
-              {LEAD_STATUS_OPTIONS.map((status) => (
-                <option key={status.value} value={status.value}>{status.label}</option>
-              ))}
-              <option value="sem_status">Sem status comercial</option>
-            </select>
-          </label>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(220px,280px)_1fr]">
+            <label className="block">
+              <span className="mb-1 block text-xs font-bold uppercase text-slate-500">Filtro de status</span>
+              <select
+                value={filtroStatus}
+                onChange={(e) => setFiltroStatus(e.target.value as FiltroStatus)}
+                className="w-full rounded-lg border bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="abertos">Leads abertos</option>
+                {LEAD_STATUS_OPTIONS.map((status) => (
+                  <option key={status.value} value={status.value}>{status.label}</option>
+                ))}
+                <option value="sem_status">Sem status comercial</option>
+              </select>
+            </label>
+            <div>
+              <span className="mb-1 block text-xs font-bold uppercase text-slate-500">Pesquisa</span>
+              <SearchInput
+                value={termoPesquisa}
+                onChange={setTermoPesquisa}
+                placeholder="Pesquisar por cliente, telefone, rota, companhia ou produto"
+                ariaLabel="Pesquisar oportunidades"
+              />
+            </div>
+          </div>
+          {!carregando && cotacoesFiltradas.length > 0 && (
+            <p className="mt-3 text-xs font-semibold text-slate-500">
+              {termoPesquisaNormalizado
+                ? `${oportunidadesPesquisadas.length} ${oportunidadesPesquisadas.length === 1 ? 'oportunidade encontrada' : 'oportunidades encontradas'} em ${oportunidades.length} ${oportunidades.length === 1 ? 'oportunidade' : 'oportunidades'}`
+                : `${oportunidades.length} ${oportunidades.length === 1 ? 'oportunidade carregada' : 'oportunidades carregadas'}`}
+            </p>
+          )}
         </div>
 
         {carregando ? (
@@ -336,9 +447,14 @@ function LeadsContent() {
               { href: '/', label: 'Criar nova cotação', variant: 'secondary' },
             ]}
           />
+        ) : oportunidadesPesquisadas.length === 0 ? (
+          <EmptyState
+            title={`Nenhum resultado encontrado para "${termoPesquisa.trim()}".`}
+            description="Tente pesquisar por cliente, telefone, rota, companhia, produto ou status."
+          />
         ) : (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {oportunidades.map((oportunidade) => (
+            {oportunidadesPesquisadas.map((oportunidade) => (
               <article key={oportunidade.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
@@ -383,6 +499,25 @@ function LeadsContent() {
                 <p className="mt-4 w-fit rounded-lg bg-slate-50 px-3 py-2 text-xs font-black uppercase text-slate-600">
                   {oportunidade.cotacoes.length} {oportunidade.cotacoes.length === 1 ? 'cotação relacionada' : 'cotações relacionadas'}
                 </p>
+
+                {oportunidade.cotacaoMaisRecente.leadStatus === 'fechado' && (
+                  <div className="mt-4">
+                    <button
+                      type="button"
+                      onClick={() => adicionarOportunidadeAosClientes(oportunidade)}
+                      disabled={profileLoading || oportunidadeEmConversaoId === oportunidade.id || clientesAdicionadosIds.includes(oportunidade.id)}
+                      className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs font-black uppercase text-green-700 transition hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {clientesAdicionadosIds.includes(oportunidade.id)
+                        ? 'Cliente já adicionado'
+                        : oportunidadeEmConversaoId === oportunidade.id
+                          ? 'Adicionando...'
+                          : profileLoading
+                            ? 'Carregando perfil...'
+                            : 'Adicionar aos clientes'}
+                    </button>
+                  </div>
+                )}
 
                 {oportunidade.produtosOfertados.length > 0 && (
                   <div className="mt-4 flex flex-wrap gap-2">
