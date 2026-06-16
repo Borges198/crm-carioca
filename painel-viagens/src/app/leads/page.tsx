@@ -6,7 +6,9 @@ import AuthGuard from '../../components/AuthGuard';
 import EmptyState from '../../components/EmptyState';
 import SearchInput from '../../components/SearchInput';
 import { useAuth } from '../../context/AuthContext';
+import { criarCliente, listarClientesDoUsuario } from '../../services/clientesService';
 import { atualizarCotacao, listarCotacoesDoUsuario } from '../../services/cotacoesService';
+import { DEFAULT_AGENCY_ID } from '../../types';
 import type { Cotacao } from '../../types';
 import {
   LEAD_STATUS_OPTIONS,
@@ -17,6 +19,7 @@ import {
   type LeadStatus,
   type ProdutoOfertado,
 } from '../../lib/leadUtils';
+import { converterCotacaoFechadaEmCliente } from '../../utils/clienteConversionUtils';
 import { filterBySearch, normalizeSearchText } from '../../utils/searchUtils';
 
 type FiltroStatus = 'abertos' | 'sem_status' | LeadStatus;
@@ -169,11 +172,13 @@ function normalizarProdutosOfertados(produtos?: string[]): ProdutoOfertado[] {
 }
 
 function LeadsContent() {
-  const { user } = useAuth();
+  const { user, accessProfile, profileLoading } = useAuth();
   const [cotacoes, setCotacoes] = useState<Cotacao[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [filtroStatus, setFiltroStatus] = useState<FiltroStatus>('abertos');
   const [termoPesquisa, setTermoPesquisa] = useState('');
+  const [oportunidadeEmConversaoId, setOportunidadeEmConversaoId] = useState<string | null>(null);
+  const [clientesAdicionadosIds, setClientesAdicionadosIds] = useState<string[]>([]);
   const [modalComercialAberto, setModalComercialAberto] = useState(false);
   const [cotacaoComercialEmEdicao, setCotacaoComercialEmEdicao] = useState<Cotacao | null>(null);
   const [editLeadStatus, setEditLeadStatus] = useState<LeadStatus>('novo');
@@ -306,6 +311,65 @@ function LeadsContent() {
     }
   };
 
+  const adicionarOportunidadeAosClientes = async (oportunidade: LeadOpportunity) => {
+    if (!user) {
+      alert('Você precisa estar logado para adicionar um cliente.');
+      return;
+    }
+
+    const cotacaoReferencia = oportunidade.cotacaoMaisRecente;
+    if (cotacaoReferencia.leadStatus !== 'fechado') {
+      alert('Somente oportunidades marcadas como fechado podem virar cliente.');
+      return;
+    }
+
+    const nomeCliente = cotacaoReferencia.cliente?.trim() || 'Cliente sem nome';
+    const confirmar = window.confirm(`Adicionar ${nomeCliente} à carteira de clientes?`);
+    if (!confirmar) {
+      return;
+    }
+
+    setOportunidadeEmConversaoId(oportunidade.id);
+
+    try {
+      const clientesExistentes = await listarClientesDoUsuario(user.uid);
+      const agencyIdParaCriacao = profileLoading
+        ? ''
+        : accessProfile.agencyId ?? DEFAULT_AGENCY_ID;
+      const resultado = await converterCotacaoFechadaEmCliente({
+        cotacao: cotacaoReferencia,
+        userId: user.uid,
+        agencyId: agencyIdParaCriacao,
+        formatarData,
+        clientesExistentes,
+        criarCliente,
+      });
+
+      if (resultado.status === 'duplicate') {
+        alert('Este cliente já existe na carteira.');
+        return;
+      }
+
+      if (resultado.status === 'not_closed') {
+        alert('Somente oportunidades marcadas como fechado podem virar cliente.');
+        return;
+      }
+
+      if (resultado.status === 'missing_agency') {
+        alert('Não foi possível identificar a agência do seu perfil. Aguarde o carregamento do perfil e tente novamente.');
+        return;
+      }
+
+      setClientesAdicionadosIds((ids) => [...ids, oportunidade.id]);
+      alert('Cliente adicionado à carteira com sucesso.');
+    } catch (error) {
+      console.error('Erro ao adicionar cliente a partir da oportunidade:', error);
+      alert('Erro ao adicionar cliente.');
+    } finally {
+      setOportunidadeEmConversaoId(null);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-gray-50 p-6 md:p-8">
       <div className="mx-auto max-w-7xl">
@@ -435,6 +499,25 @@ function LeadsContent() {
                 <p className="mt-4 w-fit rounded-lg bg-slate-50 px-3 py-2 text-xs font-black uppercase text-slate-600">
                   {oportunidade.cotacoes.length} {oportunidade.cotacoes.length === 1 ? 'cotação relacionada' : 'cotações relacionadas'}
                 </p>
+
+                {oportunidade.cotacaoMaisRecente.leadStatus === 'fechado' && (
+                  <div className="mt-4">
+                    <button
+                      type="button"
+                      onClick={() => adicionarOportunidadeAosClientes(oportunidade)}
+                      disabled={profileLoading || oportunidadeEmConversaoId === oportunidade.id || clientesAdicionadosIds.includes(oportunidade.id)}
+                      className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs font-black uppercase text-green-700 transition hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {clientesAdicionadosIds.includes(oportunidade.id)
+                        ? 'Cliente já adicionado'
+                        : oportunidadeEmConversaoId === oportunidade.id
+                          ? 'Adicionando...'
+                          : profileLoading
+                            ? 'Carregando perfil...'
+                            : 'Adicionar aos clientes'}
+                    </button>
+                  </div>
+                )}
 
                 {oportunidade.produtosOfertados.length > 0 && (
                   <div className="mt-4 flex flex-wrap gap-2">

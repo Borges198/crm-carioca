@@ -14,7 +14,7 @@ import {
   listarCotacoesDoUsuario,
 } from '../../services/cotacoesService';
 import { DEFAULT_AGENCY_ID } from '../../types';
-import type { Cotacao, NovoCliente } from '../../types';
+import type { Cotacao } from '../../types';
 import {
   LEAD_STATUS_OPTIONS,
   PRODUTOS_OFERTADOS_OPTIONS,
@@ -23,6 +23,7 @@ import {
   type LeadStatus,
   type ProdutoOfertado,
 } from '../../lib/leadUtils';
+import { converterCotacaoFechadaEmCliente } from '../../utils/clienteConversionUtils';
 import { filterBySearch, normalizeSearchText } from '../../utils/searchUtils';
 
 type VisaoHistorico = 'minhas' | 'equipe';
@@ -206,16 +207,6 @@ function HistoricoContent() {
     }
   };
 
-  const normalizarNomeCliente = (nome: string) => (
-    nome.trim().toLowerCase().replace(/\s+/g, ' ')
-  );
-
-  const montarResumoViagem = (item: Cotacao) => {
-    const rota = `${item.origem} → ${item.destino}`;
-    if (!item.dataIda) return rota;
-    return `${rota} | ${formatarData(item.dataIda)}`;
-  };
-
   const adicionarAosClientes = async (item: Cotacao) => {
     if (!user) {
       alert("Você precisa estar logado para adicionar um cliente.");
@@ -235,27 +226,30 @@ function HistoricoContent() {
 
     try {
       const clientesExistentes = await listarClientesDoUsuario(user.uid);
+      const resultado = await converterCotacaoFechadaEmCliente({
+        cotacao: item,
+        userId: user.uid,
+        agencyId: accessProfile.agencyId ?? DEFAULT_AGENCY_ID,
+        formatarData,
+        clientesExistentes,
+        criarCliente,
+      });
 
-      const nomeNormalizado = normalizarNomeCliente(nomeCliente);
-      const clienteDuplicado = clientesExistentes.some((cliente) => (
-        normalizarNomeCliente(cliente.nome) === nomeNormalizado
-      ));
-
-      if (clienteDuplicado) {
+      if (resultado.status === 'duplicate') {
         alert("Este cliente já existe na carteira.");
         return;
       }
 
-      const novoCliente: NovoCliente = {
-        nome: nomeCliente,
-        origemLead: 'Cotação fechada',
-        primeiraViagem: montarResumoViagem(item),
-        ownerId: user.uid,
-        agencyId: accessProfile.agencyId ?? DEFAULT_AGENCY_ID,
-        dataCadastro: new Date(),
-      };
+      if (resultado.status === 'not_closed') {
+        alert("Somente cotações marcadas como fechado podem virar cliente.");
+        return;
+      }
 
-      await criarCliente(novoCliente);
+      if (resultado.status === 'missing_agency') {
+        alert("Não foi possível identificar a agência do seu perfil. Aguarde o carregamento do perfil e tente novamente.");
+        return;
+      }
+
       alert("Cliente adicionado à carteira com sucesso.");
     } catch (error) {
       console.error("Erro ao adicionar cliente a partir da cotação:", error);
