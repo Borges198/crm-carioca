@@ -1,13 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Timestamp } from 'firebase/firestore';
 import AuthGuard from '../../components/AuthGuard';
 import EmptyState from '../../components/EmptyState';
+import SearchInput from '../../components/SearchInput';
 import { useAuth } from '../../context/AuthContext';
 import { atualizarCliente, criarCliente, excluirCliente as excluirClienteFirestore, listarClientesDoUsuario } from '../../services/clientesService';
 import { DEFAULT_AGENCY_ID } from '../../types';
 import type { Cliente, NovoCliente } from '../../types';
+import { filterBySearch, normalizeSearchText } from '../../utils/searchUtils';
 
 export default function Clientes() {
   return (
@@ -21,6 +23,7 @@ function ClientesContent() {
   const { user, accessProfile } = useAuth();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [carregando, setCarregando] = useState(true);
+  const [termoPesquisa, setTermoPesquisa] = useState('');
   
   // Estados para o Modal de Criação (Legados)
   const [modalAberto, setModalAberto] = useState(false);
@@ -146,6 +149,18 @@ function ClientesContent() {
     return origemLead;
   };
 
+  const termoPesquisaNormalizado = normalizeSearchText(termoPesquisa);
+  const clientesPesquisados = useMemo(() => (
+    filterBySearch(clientes, termoPesquisa, (cliente) => [
+      cliente.nome,
+      cliente.telefone,
+      cliente.telefoneNormalizado,
+      cliente.origemLead,
+      cliente.primeiraViagem,
+      cliente.dataCadastro ? formatarData(cliente.dataCadastro) : undefined,
+    ])
+  ), [clientes, termoPesquisa]);
+
   return (
     <main className="min-h-screen bg-slate-50 p-4 sm:p-6 md:p-8">
       <div className="max-w-7xl mx-auto">
@@ -166,6 +181,22 @@ function ClientesContent() {
           <p className="text-4xl font-black text-green-600 mt-1">{clientes.length}</p>
         </div>
 
+        {!carregando && clientes.length > 0 && (
+          <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <SearchInput
+              value={termoPesquisa}
+              onChange={setTermoPesquisa}
+              placeholder="Pesquisar por nome, telefone, origem ou viagem"
+              ariaLabel="Pesquisar clientes"
+            />
+            <p className="mt-3 text-xs font-semibold text-slate-500">
+              {termoPesquisaNormalizado
+                ? `${clientesPesquisados.length} ${clientesPesquisados.length === 1 ? 'resultado encontrado' : 'resultados encontrados'} em ${clientes.length} ${clientes.length === 1 ? 'cliente' : 'clientes'}`
+                : `${clientes.length} ${clientes.length === 1 ? 'cliente carregado' : 'clientes carregados'}`}
+            </p>
+          </div>
+        )}
+
         {carregando ? (
           <div className="flex justify-center items-center py-20">
             <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-green-600"></div>
@@ -179,10 +210,15 @@ function ClientesContent() {
               { href: '/leads', label: 'Ver oportunidades', variant: 'secondary' },
             ]}
           />
+        ) : clientesPesquisados.length === 0 ? (
+          <EmptyState
+            title={`Nenhum resultado encontrado para "${termoPesquisa.trim()}".`}
+            description="Tente pesquisar por nome, telefone, origem, primeira viagem ou data de cadastro."
+          />
         ) : (
           <>
           <div className="space-y-4 md:hidden">
-            {clientes.map((cliente) => (
+            {clientesPesquisados.map((cliente) => (
               <article key={cliente.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -243,7 +279,7 @@ function ClientesContent() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {clientes.map((cliente) => (
+                {clientesPesquisados.map((cliente) => (
                   <tr key={cliente.id} className="hover:bg-slate-50 transition duration-150">
                     <td className="px-4 py-4 font-bold text-slate-800 text-lg md:px-6">{cliente.nome}</td>
                     <td className="px-4 py-4 text-slate-600 md:px-6">{cliente.telefone}</td>
