@@ -31,6 +31,10 @@ export interface Cotacao {
   telefoneNormalizado?: string;
   origem: string;
   destino: string;
+  origemIda?: string;
+  destinoIda?: string;
+  origemVolta?: string;
+  destinoVolta?: string;
   companhia: Companhia | string;
   companhiaIda?: Companhia | string;
   companhiaVolta?: Companhia | string | null;

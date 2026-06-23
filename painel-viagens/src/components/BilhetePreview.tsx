@@ -1,5 +1,6 @@
 import { RefObject } from 'react';
 import { calcularDuracao } from '../utils/viagemUtils';
+import { resolverRotasCotacao } from '../utils/rotaCotacaoUtils';
 import type { Companhia } from '../types';
 
 interface BilhetePreviewProps {
@@ -9,6 +10,10 @@ interface BilhetePreviewProps {
   companhiaVolta?: string | null;
   origem: string;
   destino: string;
+  origemIda?: string;
+  destinoIda?: string;
+  origemVolta?: string;
+  destinoVolta?: string;
   tipoVoo: string;
   dataIda: string;
   horaSaidaIda: string;
@@ -162,6 +167,10 @@ export default function BilhetePreview({
   companhiaVolta,
   origem,
   destino,
+  origemIda,
+  destinoIda,
+  origemVolta,
+  destinoVolta,
   tipoVoo,
   dataIda,
   horaSaidaIda,
@@ -176,6 +185,15 @@ export default function BilhetePreview({
   const companhiaTrechoVolta = companhiaVolta || companhiaIda || companhia;
   const temaIda = getTemaCompanhia(companhiaTrechoIda);
   const temaVolta = getTemaCompanhia(companhiaTrechoVolta);
+  const rotas = resolverRotasCotacao({
+    tipoVoo,
+    origem,
+    destino,
+    origemIda,
+    destinoIda,
+    origemVolta,
+    destinoVolta,
+  });
 
   return (
     <div ref={ticketRef} className="w-[420px] max-w-full overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-sm">
@@ -215,8 +233,8 @@ export default function BilhetePreview({
         <TrechoCard
           label="Trecho ida"
           data={dataIda}
-          origemTrecho={origem}
-          destinoTrecho={destino}
+          origemTrecho={rotas.ida.origem}
+          destinoTrecho={rotas.ida.destino}
           horaSaida={horaSaidaIda}
           horaChegada={horaChegadaIda}
           paradas={paradasIda}
@@ -228,8 +246,8 @@ export default function BilhetePreview({
           <TrechoCard
             label="Trecho volta"
             data={dataVolta}
-            origemTrecho={destino}
-            destinoTrecho={origem}
+            origemTrecho={rotas.volta?.origem ?? ''}
+            destinoTrecho={rotas.volta?.destino ?? ''}
             horaSaida={horaSaidaVolta}
             horaChegada={horaChegadaVolta}
             paradas={paradasVolta}

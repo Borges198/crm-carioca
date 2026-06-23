@@ -26,6 +26,8 @@ interface FormularioCotacaoProps {
   telefone: string; setTelefone: (v: string) => void;
   origem: string; setOrigem: (v: string) => void;
   destino: string; setDestino: (v: string) => void;
+  origemVolta: string; setOrigemVolta: (v: string) => void;
+  destinoVolta: string; setDestinoVolta: (v: string) => void;
   companhia: Companhia; setCompanhia: (v: Companhia) => void;
   companhiaIda: string; setCompanhiaIda: (v: Companhia) => void;
   companhiaVolta: string; setCompanhiaVolta: (v: Companhia) => void;
@@ -64,6 +66,7 @@ function formatarTrecho(trecho: SmartPasteCandidate['trecho']) {
 export default function FormularioCotacao({
   userId,
   cliente, setCliente, telefone, setTelefone, origem, setOrigem, destino, setDestino,
+  origemVolta, setOrigemVolta, destinoVolta, setDestinoVolta,
   companhia, setCompanhia, companhiaIda, setCompanhiaIda, companhiaVolta, setCompanhiaVolta, tipoVoo, setTipoVoo,
   dataIda, setDataIda, horaSaidaIda, setHoraSaidaIda, horaChegadaIda, setHoraChegadaIda, paradasIda, setParadasIda,
   dataVolta, setDataVolta, horaSaidaVolta, setHoraSaidaVolta, horaChegadaVolta, setHoraChegadaVolta, paradasVolta, setParadasVolta,
@@ -275,11 +278,6 @@ export default function FormularioCotacao({
           </div>
         )}
         
-        <div className="grid grid-cols-2 gap-4">
-          <input type="text" value={origem} onChange={(e) => setOrigem(e.target.value.toUpperCase())} placeholder="Origem (Ex: SSA)" maxLength={3} className="w-full px-4 py-2 border rounded-lg bg-slate-50 uppercase text-center" />
-          <input type="text" value={destino} onChange={(e) => setDestino(e.target.value.toUpperCase())} placeholder="Destino (Ex: CGH)" maxLength={3} className="w-full px-4 py-2 border rounded-lg bg-slate-50 uppercase text-center" />
-        </div>
-
         <div className="flex justify-center bg-slate-100 p-1 rounded-lg">
           <button onClick={() => setTipoVoo('ida')} className={`w-1/2 py-1 text-sm font-bold rounded-md ${tipoVoo === 'ida' ? 'bg-white shadow text-blue-700' : 'text-slate-500'}`}>Somente Ida</button>
           <button onClick={() => setTipoVoo('ida_volta')} className={`w-1/2 py-1 text-sm font-bold rounded-md ${tipoVoo === 'ida_volta' ? 'bg-white shadow text-blue-700' : 'text-slate-500'}`}>Ida e Volta</button>
@@ -295,6 +293,10 @@ export default function FormularioCotacao({
             >
               Colar dados da ida
             </button>
+          </div>
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <input type="text" value={origem} onChange={(e) => setOrigem(e.target.value.toUpperCase())} placeholder="Origem" maxLength={3} className="w-full px-2 py-1 border rounded text-sm bg-white uppercase text-center" />
+            <input type="text" value={destino} onChange={(e) => setDestino(e.target.value.toUpperCase())} placeholder="Destino" maxLength={3} className="w-full px-2 py-1 border rounded text-sm bg-white uppercase text-center" />
           </div>
           <div className="grid grid-cols-2 gap-2 mb-2">
             <input type="date" value={dataIda} onChange={(e) => setDataIda(e.target.value)} className="col-span-2 px-2 py-1 border rounded text-sm bg-white text-slate-700" />
@@ -319,6 +321,10 @@ export default function FormularioCotacao({
               >
                 Colar dados da volta
               </button>
+            </div>
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              <input type="text" value={origemVolta} onChange={(e) => setOrigemVolta(e.target.value.toUpperCase())} placeholder="Origem" maxLength={3} className="w-full px-2 py-1 border rounded text-sm bg-white uppercase text-center" />
+              <input type="text" value={destinoVolta} onChange={(e) => setDestinoVolta(e.target.value.toUpperCase())} placeholder="Destino" maxLength={3} className="w-full px-2 py-1 border rounded text-sm bg-white uppercase text-center" />
             </div>
             <div className="grid grid-cols-2 gap-2 mb-2">
               <input type="date" value={dataVolta} onChange={(e) => setDataVolta(e.target.value)} className="col-span-2 px-2 py-1 border rounded text-sm bg-white text-slate-700" />

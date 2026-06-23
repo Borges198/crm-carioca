@@ -12,6 +12,10 @@ interface MontarNovaCotacaoInput {
   telefoneNormalizado?: string;
   origem: string;
   destino: string;
+  origemIda?: string;
+  destinoIda?: string;
+  origemVolta?: string;
+  destinoVolta?: string;
   companhia: Companhia;
   tipoVoo: string;
   dataIda: string;
@@ -39,6 +43,10 @@ interface MontarNovaCotacaoInput {
   leadStatus?: LeadStatus;
 }
 
+function campoTextoPreenchido(valor?: string | null) {
+  return typeof valor === 'string' && valor.trim() !== '';
+}
+
 export function montarNovaCotacao(input: MontarNovaCotacaoInput): NovaCotacao {
   const novaCotacao: NovaCotacao = {
     cliente: input.cliente,
@@ -64,6 +72,18 @@ export function montarNovaCotacao(input: MontarNovaCotacaoInput): NovaCotacao {
 
   if (typeof input.companhiaIda !== 'undefined') {
     novaCotacao.companhiaIda = input.companhiaIda;
+  }
+  if (campoTextoPreenchido(input.origemIda)) {
+    novaCotacao.origemIda = input.origemIda;
+  }
+  if (campoTextoPreenchido(input.destinoIda)) {
+    novaCotacao.destinoIda = input.destinoIda;
+  }
+  if (campoTextoPreenchido(input.origemVolta)) {
+    novaCotacao.origemVolta = input.origemVolta;
+  }
+  if (campoTextoPreenchido(input.destinoVolta)) {
+    novaCotacao.destinoVolta = input.destinoVolta;
   }
   if (typeof input.companhiaVolta !== 'undefined') {
     novaCotacao.companhiaVolta = input.companhiaVolta;

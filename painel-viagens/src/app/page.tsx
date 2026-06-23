@@ -31,6 +31,8 @@ export default function Home() {
   const [telefone, setTelefone] = useState('');
   const [origem, setOrigem] = useState('');
   const [destino, setDestino] = useState('');
+  const [origemVolta, setOrigemVolta] = useState('');
+  const [destinoVolta, setDestinoVolta] = useState('');
   const [companhia, setCompanhia] = useState<Companhia>('Azul');
   const [companhiaIda, setCompanhiaIda] = useState('');
   const [companhiaVolta, setCompanhiaVolta] = useState('');
@@ -85,6 +87,8 @@ export default function Home() {
       setCompanhiaVolta(companhiaVolta || companhiaIda || companhiaAtual);
       setPontosIda(pontosIda || pontos);
       setTaxaIda(taxaIda || taxaEmbarque);
+      if (!origemVolta.trim()) setOrigemVolta(destino);
+      if (!destinoVolta.trim()) setDestinoVolta(origem);
       return;
     }
 
@@ -226,6 +230,12 @@ export default function Home() {
       if (tipoVoo === 'ida_volta' && (!isHoraValida(horaSaidaVolta) || !isHoraValida(horaChegadaVolta))) {
         alert("Atenção: Os horários do voo de VOLTA estão inválidos."); return;
       }
+      if (!origem.trim() || !destino.trim()) {
+        alert("Atenção: Preencha a origem e o destino da ida."); return;
+      }
+      if (tipoVoo === 'ida_volta' && (!origemVolta.trim() || !destinoVolta.trim())) {
+        alert("Atenção: Preencha a origem e o destino da volta."); return;
+      }
 
       const extrairNumero = (valor: string) => {
         const apenasNumeros = valor.replace(/\D/g, '');
@@ -299,6 +309,15 @@ export default function Home() {
       const dataVoltaFormatada = normalizarDataParaCotacao(dataVolta);
       const telefoneCotacao = telefone.trim();
       const telefoneNormalizado = normalizarTelefone(telefoneCotacao);
+      const camposRotasPorTrecho: Partial<Pick<NovaCotacao, 'origemIda' | 'destinoIda' | 'origemVolta' | 'destinoVolta'>> = {
+        origemIda: origem,
+        destinoIda: destino,
+      };
+
+      if (tipoVoo === 'ida_volta') {
+        camposRotasPorTrecho.origemVolta = origemVolta;
+        camposRotasPorTrecho.destinoVolta = destinoVolta;
+      }
 
       const novaCotacao: NovaCotacao = montarNovaCotacao({
         ownerId: user.uid,
@@ -326,6 +345,7 @@ export default function Home() {
         produtosOfertados,
         observacao,
         leadStatus,
+        ...camposRotasPorTrecho,
         ...camposPorTrecho
       });
 
@@ -372,6 +392,8 @@ export default function Home() {
           telefone={telefone} setTelefone={setTelefone}
           origem={origem} setOrigem={setOrigem}
           destino={destino} setDestino={setDestino}
+          origemVolta={origemVolta} setOrigemVolta={setOrigemVolta}
+          destinoVolta={destinoVolta} setDestinoVolta={setDestinoVolta}
           companhia={companhia} setCompanhia={atualizarCompanhia}
           companhiaIda={companhiaIda} setCompanhiaIda={setCompanhiaIda}
           companhiaVolta={companhiaVolta} setCompanhiaVolta={setCompanhiaVolta}
@@ -416,6 +438,10 @@ export default function Home() {
               companhiaVolta={companhiaVolta || undefined}
               origem={origem}
               destino={destino}
+              origemIda={origem}
+              destinoIda={destino}
+              origemVolta={origemVolta}
+              destinoVolta={destinoVolta}
               tipoVoo={tipoVoo} dataIda={dataIda} horaSaidaIda={horaSaidaIda} horaChegadaIda={horaChegadaIda} paradasIda={paradasIda}
               dataVolta={dataVolta} horaSaidaVolta={horaSaidaVolta} horaChegadaVolta={horaChegadaVolta} paradasVolta={paradasVolta}
             />
