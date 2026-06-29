@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Cliente } from '../types';
 
 const { listarClientesDoUsuario } = vi.hoisted(() => ({
@@ -11,7 +11,9 @@ vi.mock('../services/clientesService', () => ({
 }));
 
 import {
+  agendarBuscaClientePorTelefone,
   carregarClientesDoAutocomplete,
+  DEBOUNCE_PESQUISA_TELEFONE_MS,
   filtrarClientesPorNome,
   obterClienteSugeridoPorTelefone,
   obterTelefonePreenchivel,
@@ -47,6 +49,10 @@ const sugestaoPorTelefone: SugestaoPorTelefone = {
 describe('FormularioCotacao - autocomplete de clientes', () => {
   beforeEach(() => {
     listarClientesDoUsuario.mockReset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('carrega clientes quando userId existe', async () => {
@@ -165,5 +171,159 @@ describe('FormularioCotacao - autocomplete de clientes', () => {
     );
 
     expect(clienteDoUsuarioAnterior).toBeNull();
+  });
+
+  it('digitação rápida consulta somente o último telefone após o debounce', async () => {
+    vi.useFakeTimers();
+    const buscarCliente = vi.fn().mockResolvedValue(clientes[0]);
+    const aoConcluir = vi.fn();
+
+    const cancelarPrimeira = agendarBuscaClientePorTelefone({
+      userId: 'usuario-1',
+      telefone: '8',
+      aoConcluir,
+      buscarCliente,
+    });
+    cancelarPrimeira();
+    const cancelarSegunda = agendarBuscaClientePorTelefone({
+      userId: 'usuario-1',
+      telefone: '82',
+      aoConcluir,
+      buscarCliente,
+    });
+    cancelarSegunda();
+    agendarBuscaClientePorTelefone({
+      userId: 'usuario-1',
+      telefone: '82999',
+      aoConcluir,
+      buscarCliente,
+    });
+
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_PESQUISA_TELEFONE_MS);
+
+    expect(buscarCliente).toHaveBeenCalledOnce();
+    expect(buscarCliente).toHaveBeenCalledWith('usuario-1', '82999');
+  });
+
+  it('consulta o telefone atual somente após a estabilização', async () => {
+    vi.useFakeTimers();
+    const buscarCliente = vi.fn().mockResolvedValue(clientes[0]);
+    const aoConcluir = vi.fn();
+
+    agendarBuscaClientePorTelefone({
+      userId: 'usuario-1',
+      telefone: '(79) 99999-1111',
+      aoConcluir,
+      buscarCliente,
+    });
+
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_PESQUISA_TELEFONE_MS - 1);
+    expect(buscarCliente).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(buscarCliente).toHaveBeenCalledWith('usuario-1', '79999991111');
+    expect(aoConcluir).toHaveBeenCalledWith(sugestaoPorTelefone);
+  });
+
+  it('campo vazio não agenda consulta e invalida a sugestão anterior', async () => {
+    vi.useFakeTimers();
+    const buscarCliente = vi.fn();
+    const aoConcluir = vi.fn();
+
+    const cancelarBuscaPendente = agendarBuscaClientePorTelefone({
+      userId: 'usuario-1',
+      telefone: '(79) 99999-1111',
+      aoConcluir,
+      buscarCliente,
+    });
+    cancelarBuscaPendente();
+    agendarBuscaClientePorTelefone({
+      userId: 'usuario-1',
+      telefone: '',
+      aoConcluir,
+      buscarCliente,
+    });
+
+    await vi.runAllTimersAsync();
+
+    expect(buscarCliente).not.toHaveBeenCalled();
+    expect(aoConcluir).not.toHaveBeenCalled();
+    expect(obterClienteSugeridoPorTelefone(sugestaoPorTelefone, 'usuario-1', '')).toBeNull();
+  });
+
+  it('resposta de telefone antigo não substitui o telefone atual', async () => {
+    vi.useFakeTimers();
+    let resolverBuscaAntiga: ((cliente: Cliente | null) => void) | undefined;
+    const buscarClienteAntigo = vi.fn(() => new Promise<Cliente | null>((resolve) => {
+      resolverBuscaAntiga = resolve;
+    }));
+    const aoConcluir = vi.fn();
+
+    const cancelarBuscaAntiga = agendarBuscaClientePorTelefone({
+      userId: 'usuario-1',
+      telefone: '(79) 99999-1111',
+      aoConcluir,
+      buscarCliente: buscarClienteAntigo,
+    });
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_PESQUISA_TELEFONE_MS);
+    cancelarBuscaAntiga();
+
+    agendarBuscaClientePorTelefone({
+      userId: 'usuario-1',
+      telefone: '(79) 98888-2222',
+      aoConcluir,
+      buscarCliente: vi.fn().mockResolvedValue(clientes[2]),
+    });
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_PESQUISA_TELEFONE_MS);
+    resolverBuscaAntiga?.(clientes[0]);
+    await Promise.resolve();
+
+    expect(aoConcluir).toHaveBeenCalledOnce();
+    expect(aoConcluir).toHaveBeenCalledWith({
+      userId: 'usuario-1',
+      telefoneNormalizado: '79988882222',
+      cliente: clientes[2],
+    });
+  });
+
+  it('troca de usuário cancela resultado pendente do usuário anterior', async () => {
+    vi.useFakeTimers();
+    let resolverBuscaAnterior: ((cliente: Cliente | null) => void) | undefined;
+    const buscarCliente = vi.fn(() => new Promise<Cliente | null>((resolve) => {
+      resolverBuscaAnterior = resolve;
+    }));
+    const aoConcluir = vi.fn();
+
+    const cancelarBuscaAnterior = agendarBuscaClientePorTelefone({
+      userId: 'usuario-1',
+      telefone: '(79) 99999-1111',
+      aoConcluir,
+      buscarCliente,
+    });
+    await vi.advanceTimersByTimeAsync(DEBOUNCE_PESQUISA_TELEFONE_MS);
+    cancelarBuscaAnterior();
+    resolverBuscaAnterior?.(clientes[0]);
+    await Promise.resolve();
+
+    expect(aoConcluir).not.toHaveBeenCalled();
+    expect(
+      obterClienteSugeridoPorTelefone(sugestaoPorTelefone, 'usuario-2', '(79) 99999-1111')
+    ).toBeNull();
+  });
+
+  it('logout cancela o debounce antes da consulta', async () => {
+    vi.useFakeTimers();
+    const buscarCliente = vi.fn();
+    const cancelarBusca = agendarBuscaClientePorTelefone({
+      userId: 'usuario-1',
+      telefone: '(79) 99999-1111',
+      aoConcluir: vi.fn(),
+      buscarCliente,
+    });
+
+    cancelarBusca();
+    await vi.runAllTimersAsync();
+
+    expect(buscarCliente).not.toHaveBeenCalled();
   });
 });

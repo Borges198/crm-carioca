@@ -22,10 +22,58 @@ const extrairNumero = (value: string) => {
 
 const normalizarTelefone = (value: string) => value.replace(/\D/g, '');
 
+export const DEBOUNCE_PESQUISA_TELEFONE_MS = 400;
+
 export interface SugestaoPorTelefone {
   userId: string;
   telefoneNormalizado: string;
   cliente: Cliente | null;
+}
+
+interface AgendarBuscaClientePorTelefoneParams {
+  userId: string;
+  telefone: string;
+  aoConcluir: (sugestao: SugestaoPorTelefone) => void;
+  aoFalhar?: (error: unknown) => void;
+  buscarCliente?: typeof buscarClientePorTelefoneDoUsuario;
+  atraso?: number;
+}
+
+export function agendarBuscaClientePorTelefone({
+  userId,
+  telefone,
+  aoConcluir,
+  aoFalhar,
+  buscarCliente = buscarClientePorTelefoneDoUsuario,
+  atraso = DEBOUNCE_PESQUISA_TELEFONE_MS,
+}: AgendarBuscaClientePorTelefoneParams) {
+  const telefoneNormalizado = normalizarTelefone(telefone);
+  let buscaAtiva = true;
+
+  if (!userId || !telefoneNormalizado) {
+    return () => {
+      buscaAtiva = false;
+    };
+  }
+
+  const timer = setTimeout(async () => {
+    try {
+      const clienteEncontrado = await buscarCliente(userId, telefoneNormalizado);
+      if (buscaAtiva) {
+        aoConcluir({ userId, telefoneNormalizado, cliente: clienteEncontrado });
+      }
+    } catch (error) {
+      if (buscaAtiva) {
+        aoFalhar?.(error);
+        aoConcluir({ userId, telefoneNormalizado, cliente: null });
+      }
+    }
+  }, atraso);
+
+  return () => {
+    buscaAtiva = false;
+    clearTimeout(timer);
+  };
 }
 
 export function obterClienteSugeridoPorTelefone(
@@ -187,26 +235,15 @@ export default function FormularioCotacao({
       };
     }
 
-    let buscaAtiva = true;
-
-    const buscarClientePorTelefone = async () => {
-      try {
-        const clienteEncontrado = await buscarClientePorTelefoneDoUsuario(userId, telefoneNormalizado);
-        if (buscaAtiva) {
-          setSugestaoPorTelefone({ userId, telefoneNormalizado, cliente: clienteEncontrado });
-        }
-      } catch (error) {
-        console.error("Erro ao buscar cliente por telefone:", error);
-        if (buscaAtiva) {
-          setSugestaoPorTelefone({ userId, telefoneNormalizado, cliente: null });
-        }
-      }
-    };
-
-    buscarClientePorTelefone();
+    const cancelarBusca = agendarBuscaClientePorTelefone({
+      userId,
+      telefone,
+      aoConcluir: setSugestaoPorTelefone,
+      aoFalhar: (error) => console.error("Erro ao buscar cliente por telefone:", error),
+    });
 
     return () => {
-      buscaAtiva = false;
+      cancelarBusca();
     };
   }, [telefone, userId]);
 
