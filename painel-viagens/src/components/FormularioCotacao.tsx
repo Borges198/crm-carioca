@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
-import { buscarClientePorTelefoneDoUsuario } from '../services/clientesService';
-import { listarNomesClientesDasCotacoes } from '../services/cotacoesService';
+import {
+  buscarClientePorTelefoneDoUsuario,
+  listarClientesDoUsuario,
+} from '../services/clientesService';
 import type { Cliente, Companhia } from '../types';
 import type { SmartPasteCandidate, SmartPasteCandidatesResult } from '../lib/smartPasteCandidatesUtils';
 import { LEAD_STATUS_OPTIONS, PRODUTOS_OFERTADOS_OPTIONS, type LeadStatus, type ProdutoOfertado } from '../lib/leadUtils';
@@ -19,6 +21,68 @@ const extrairNumero = (value: string) => {
 };
 
 const normalizarTelefone = (value: string) => value.replace(/\D/g, '');
+
+export interface SugestaoPorTelefone {
+  userId: string;
+  telefoneNormalizado: string;
+  cliente: Cliente | null;
+}
+
+export function obterClienteSugeridoPorTelefone(
+  sugestao: SugestaoPorTelefone | null,
+  userId: string | undefined,
+  telefone: string
+) {
+  const telefoneNormalizado = normalizarTelefone(telefone);
+
+  if (
+    !userId ||
+    !telefoneNormalizado ||
+    sugestao?.userId !== userId ||
+    sugestao.telefoneNormalizado !== telefoneNormalizado
+  ) {
+    return null;
+  }
+
+  return sugestao.cliente;
+}
+
+export const filtrarClientesPorNome = (clientes: Cliente[], termo: string) => {
+  const termoNormalizado = termo.trim().toLocaleLowerCase('pt-BR');
+
+  if (!termoNormalizado) return [];
+
+  return clientes.filter((cliente) =>
+    cliente.nome.toLocaleLowerCase('pt-BR').includes(termoNormalizado)
+  );
+};
+
+export const obterTelefonePreenchivel = (cliente: Cliente) => {
+  const telefone = cliente.telefone?.trim() ?? '';
+  return telefone && telefone.toLocaleLowerCase('pt-BR') !== 'não informado'
+    ? telefone
+    : '';
+};
+
+export async function carregarClientesDoAutocomplete(userId?: string) {
+  if (!userId) return [];
+
+  try {
+    return await listarClientesDoUsuario(userId);
+  } catch (error) {
+    console.error('Erro ao buscar clientes:', error);
+    return [];
+  }
+}
+
+export function selecionarClienteDoAutocomplete(
+  cliente: Cliente,
+  setCliente: (value: string) => void,
+  setTelefone: (value: string) => void
+) {
+  setCliente(cliente.nome);
+  setTelefone(obterTelefonePreenchivel(cliente));
+}
 
 interface FormularioCotacaoProps {
   userId?: string;
@@ -77,12 +141,12 @@ export default function FormularioCotacao({
 }: FormularioCotacaoProps) {
   
   // 🧠 ESTADOS DA MEMÓRIA DE CLIENTES
-  const [clientesAntigos, setClientesAntigos] = useState<string[]>([]);
-  const [mostrarSugestoes, setMostrarSugestoes] = useState(false);
-  const [sugestaoPorTelefone, setSugestaoPorTelefone] = useState<{
-    telefoneNormalizado: string;
-    cliente: Cliente | null;
+  const [clientesCarregados, setClientesCarregados] = useState<{
+    userId: string;
+    clientes: Cliente[];
   } | null>(null);
+  const [mostrarSugestoes, setMostrarSugestoes] = useState(false);
+  const [sugestaoPorTelefone, setSugestaoPorTelefone] = useState<SugestaoPorTelefone | null>(null);
 
   // 🧠 BUSCAR CLIENTES NO FIREBASE AO CARREGAR
   useEffect(() => {
@@ -90,22 +154,37 @@ export default function FormularioCotacao({
       return;
     }
 
-    const buscarNomes = async () => {
-      try {
-        const nomes = await listarNomesClientesDasCotacoes(userId);
-        setClientesAntigos(nomes);
-      } catch (error) {
-        console.error("Erro ao buscar clientes antigos:", error);
+    let buscaAtiva = true;
+
+    const buscarClientes = async () => {
+      const clientes = await carregarClientesDoAutocomplete(userId);
+      if (buscaAtiva) {
+        setClientesCarregados({ userId, clientes });
       }
     };
-    buscarNomes();
+
+    buscarClientes();
+
+    return () => {
+      buscaAtiva = false;
+    };
   }, [userId]);
 
   useEffect(() => {
     const telefoneNormalizado = normalizarTelefone(telefone);
 
     if (!userId || !telefoneNormalizado) {
-      return;
+      let invalidacaoAtiva = true;
+
+      queueMicrotask(() => {
+        if (invalidacaoAtiva) {
+          setSugestaoPorTelefone(null);
+        }
+      });
+
+      return () => {
+        invalidacaoAtiva = false;
+      };
     }
 
     let buscaAtiva = true;
@@ -114,12 +193,12 @@ export default function FormularioCotacao({
       try {
         const clienteEncontrado = await buscarClientePorTelefoneDoUsuario(userId, telefoneNormalizado);
         if (buscaAtiva) {
-          setSugestaoPorTelefone({ telefoneNormalizado, cliente: clienteEncontrado });
+          setSugestaoPorTelefone({ userId, telefoneNormalizado, cliente: clienteEncontrado });
         }
       } catch (error) {
         console.error("Erro ao buscar cliente por telefone:", error);
         if (buscaAtiva) {
-          setSugestaoPorTelefone({ telefoneNormalizado, cliente: null });
+          setSugestaoPorTelefone({ userId, telefoneNormalizado, cliente: null });
         }
       }
     };
@@ -132,15 +211,14 @@ export default function FormularioCotacao({
   }, [telefone, userId]);
 
   // 🧠 FILTRAR NOMES CONFORME DIGITAÇÃO
-  const clientesSugeridos = userId
-    ? clientesAntigos.filter(nome => 
-        nome.toLowerCase().includes(cliente.toLowerCase()) && cliente.length > 0
-      )
+  const clientesSugeridos = userId && clientesCarregados?.userId === userId
+    ? filtrarClientesPorNome(clientesCarregados.clientes, cliente)
     : [];
-  const telefoneNormalizadoAtual = normalizarTelefone(telefone);
-  const clienteSugeridoPorTelefone = sugestaoPorTelefone?.telefoneNormalizado === telefoneNormalizadoAtual
-    ? sugestaoPorTelefone.cliente
-    : null;
+  const clienteSugeridoPorTelefone = obterClienteSugeridoPorTelefone(
+    sugestaoPorTelefone,
+    userId,
+    telefone
+  );
   const totalPontosTrechos = extrairNumero(pontosIda) + (tipoVoo === 'ida_volta' ? extrairNumero(pontosVolta) : 0);
   const totalTaxasTrechos = extrairNumero(taxaIda) + (tipoVoo === 'ida_volta' ? extrairNumero(taxaVolta) : 0);
   const mostrarResumoTrechos = Boolean(
@@ -242,16 +320,19 @@ export default function FormularioCotacao({
           {/* LISTA SUSPENSA DE SUGESTÕES */}
           {mostrarSugestoes && clientesSugeridos.length > 0 && (
             <ul className="absolute z-10 w-full bg-white border rounded-lg shadow-lg mt-1 max-h-40 overflow-y-auto">
-              {clientesSugeridos.map((nome, index) => (
+              {clientesSugeridos.map((clienteSugerido) => (
                 <li 
-                  key={index}
-                  className="px-4 py-2 hover:bg-blue-50 cursor-pointer text-slate-700 text-sm font-medium transition"
+                  key={clienteSugerido.id}
+                  className="cursor-pointer px-4 py-2 text-sm transition hover:bg-blue-50"
                   onClick={() => {
-                    setCliente(nome);
+                    selecionarClienteDoAutocomplete(clienteSugerido, setCliente, setTelefone);
                     setMostrarSugestoes(false);
                   }}
                 >
-                  {nome}
+                  <span className="block font-medium text-slate-700">{clienteSugerido.nome}</span>
+                  <span className="block text-xs text-slate-500">
+                    {obterTelefonePreenchivel(clienteSugerido) || 'Telefone não informado'}
+                  </span>
                 </li>
               ))}
             </ul>
