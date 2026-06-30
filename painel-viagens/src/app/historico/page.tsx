@@ -23,10 +23,87 @@ import {
   type LeadStatus,
   type ProdutoOfertado,
 } from '../../lib/leadUtils';
-import { converterCotacaoFechadaEmCliente } from '../../utils/clienteConversionUtils';
+import {
+  converterCotacaoFechadaEmCliente,
+  normalizarTelefoneCliente,
+} from '../../utils/clienteConversionUtils';
 import { filterBySearch, normalizeSearchText } from '../../utils/searchUtils';
 
 type VisaoHistorico = 'minhas' | 'equipe';
+
+export interface CamposEdicaoCotacao {
+  cliente: string;
+  telefone: string;
+  origem: string;
+  destino: string;
+  companhia: string;
+  valorTotal: number;
+  dataIda: string;
+}
+
+export function criarCamposEdicaoCotacao(cotacao: Cotacao): CamposEdicaoCotacao {
+  return {
+    cliente: cotacao.cliente,
+    telefone: cotacao.telefone ?? '',
+    origem: cotacao.origem,
+    destino: cotacao.destino,
+    companhia: cotacao.companhia,
+    valorTotal: cotacao.valorTotal || 0,
+    dataIda: cotacao.dataIda,
+  };
+}
+
+export function montarPayloadEdicaoCotacao(campos: CamposEdicaoCotacao) {
+  return {
+    cliente: campos.cliente,
+    telefone: campos.telefone,
+    telefoneNormalizado: normalizarTelefoneCliente(campos.telefone),
+    origem: campos.origem,
+    destino: campos.destino,
+    companhia: campos.companhia,
+    valorTotal: Number(campos.valorTotal),
+    dataIda: campos.dataIda,
+  };
+}
+
+export function atualizarCotacaoLocalPorId(
+  cotacoes: Cotacao[],
+  cotacaoId: string,
+  dadosAtualizados: ReturnType<typeof montarPayloadEdicaoCotacao>
+) {
+  return cotacoes.map((item) => (
+    item.id === cotacaoId ? { ...item, ...dadosAtualizados } : item
+  ));
+}
+
+export async function persistirEdicaoCotacao(
+  cotacaoId: string,
+  campos: CamposEdicaoCotacao,
+  atualizar: typeof atualizarCotacao = atualizarCotacao
+) {
+  const dadosAtualizados = montarPayloadEdicaoCotacao(campos);
+  await atualizar(cotacaoId, dadosAtualizados);
+  return dadosAtualizados;
+}
+
+export function podeEditarCotacaoCompleta(
+  role: string | undefined,
+  estaNaVisaoEquipe: boolean
+) {
+  return !(estaNaVisaoEquipe && role === 'supervisor');
+}
+
+export function montarPayloadEdicaoComercial(
+  leadStatus: LeadStatus,
+  produtosOfertados: ProdutoOfertado[],
+  observacao: string
+) {
+  return {
+    leadStatus,
+    produtosOfertados,
+    observacao: observacao.trim(),
+  };
+}
 
 export default function Historico() {
   return (
@@ -48,6 +125,7 @@ function HistoricoContent() {
   const [modalEditAberto, setModalEditAberto] = useState(false);
   const [cotacaoEmEdicao, setCotacaoEmEdicao] = useState<Cotacao | null>(null);
   const [editCliente, setEditCliente] = useState('');
+  const [editTelefone, setEditTelefone] = useState('');
   const [editOrigem, setEditOrigem] = useState('');
   const [editDestino, setEditDestino] = useState('');
   const [editCompanhia, setEditCompanhia] = useState('');
@@ -69,8 +147,10 @@ function HistoricoContent() {
     && !accessProfile.agencyId;
   const visaoAtiva: VisaoHistorico = perfilPodeVerEquipe ? visaoSelecionada : 'minhas';
   const estaNaVisaoEquipe = visaoAtiva === 'equipe';
-  const usuarioEhSupervisor = accessProfile.role === 'supervisor';
-  const supervisorNaVisaoEquipe = estaNaVisaoEquipe && usuarioEhSupervisor;
+  const permiteEdicaoCompleta = podeEditarCotacaoCompleta(
+    accessProfile.role,
+    estaNaVisaoEquipe
+  );
 
   useEffect(() => {
     if (!user) {
@@ -116,13 +196,15 @@ function HistoricoContent() {
   }, [accessProfile.agencyId, user, visaoAtiva]);
 
   const abrirModalEdicao = (item: Cotacao) => {
+    const campos = criarCamposEdicaoCotacao(item);
     setCotacaoEmEdicao(item);
-    setEditCliente(item.cliente);
-    setEditOrigem(item.origem);
-    setEditDestino(item.destino);
-    setEditCompanhia(item.companhia);
-    setEditValorTotal(item.valorTotal || 0);
-    setEditDataIda(item.dataIda);
+    setEditCliente(campos.cliente);
+    setEditTelefone(campos.telefone);
+    setEditOrigem(campos.origem);
+    setEditDestino(campos.destino);
+    setEditCompanhia(campos.companhia);
+    setEditValorTotal(campos.valorTotal);
+    setEditDataIda(campos.dataIda);
     setModalEditAberto(true);
   };
 
@@ -131,20 +213,21 @@ function HistoricoContent() {
     if (!cotacaoEmEdicao) return;
 
     try {
-      const dadosAtualizados = {
+      const dadosAtualizados = await persistirEdicaoCotacao(cotacaoEmEdicao.id, {
         cliente: editCliente,
+        telefone: editTelefone,
         origem: editOrigem,
         destino: editDestino,
         companhia: editCompanhia,
         valorTotal: Number(editValorTotal),
         dataIda: editDataIda,
-      };
-
-      await atualizarCotacao(cotacaoEmEdicao.id, dadosAtualizados);
+      });
 
       // Atualiza o estado local imediatamente
-      setCotacoes(prev => prev.map(item => 
-        item.id === cotacaoEmEdicao.id ? { ...item, ...dadosAtualizados } : item
+      setCotacoes(prev => atualizarCotacaoLocalPorId(
+        prev,
+        cotacaoEmEdicao.id,
+        dadosAtualizados
       ));
 
       setModalEditAberto(false);
@@ -186,11 +269,11 @@ function HistoricoContent() {
     e.preventDefault();
     if (!cotacaoComercialEmEdicao) return;
 
-    const dadosComerciais = {
-      leadStatus: editLeadStatus,
-      produtosOfertados: editProdutosOfertados,
-      observacao: editObservacao.trim(),
-    };
+    const dadosComerciais = montarPayloadEdicaoComercial(
+      editLeadStatus,
+      editProdutosOfertados,
+      editObservacao
+    );
 
     try {
       await atualizarCotacao(cotacaoComercialEmEdicao.id, dadosComerciais);
@@ -530,7 +613,7 @@ function HistoricoContent() {
                 )}
 
                 <div className="mt-4 grid grid-cols-2 gap-2">
-                  {!supervisorNaVisaoEquipe && (
+                  {permiteEdicaoCompleta && (
                     <button
                       type="button"
                       onClick={() => abrirModalEdicao(item)}
@@ -542,11 +625,11 @@ function HistoricoContent() {
                   <button
                     type="button"
                     onClick={() => abrirModalComercial(item)}
-                    className={`rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black uppercase text-slate-700 transition hover:bg-slate-100 ${supervisorNaVisaoEquipe ? 'col-span-2' : ''}`}
+                    className={`rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black uppercase text-slate-700 transition hover:bg-slate-100 ${permiteEdicaoCompleta ? '' : 'col-span-2'}`}
                   >
                     Editar comercial
                   </button>
-                  {!supervisorNaVisaoEquipe && item.leadStatus === 'fechado' && (
+                  {permiteEdicaoCompleta && item.leadStatus === 'fechado' && (
                     <button
                       type="button"
                       onClick={() => adicionarAosClientes(item)}
@@ -555,7 +638,7 @@ function HistoricoContent() {
                       Adicionar aos clientes
                     </button>
                   )}
-                  {!supervisorNaVisaoEquipe && (
+                  {permiteEdicaoCompleta && (
                     <button
                       type="button"
                       onClick={() => excluirCotacao(item.id, item.cliente)}
@@ -639,7 +722,7 @@ function HistoricoContent() {
                       >
                         Editar comercial
                       </button>
-                      {!supervisorNaVisaoEquipe && item.leadStatus === 'fechado' && (
+                      {permiteEdicaoCompleta && item.leadStatus === 'fechado' && (
                         <button
                           type="button"
                           onClick={() => adicionarAosClientes(item)}
@@ -653,7 +736,7 @@ function HistoricoContent() {
                       {formatarData(item.dataRegistro)}
                     </td>
                     <td className="px-4 py-4 text-center flex items-center justify-center gap-2 md:px-6">
-                      {!supervisorNaVisaoEquipe && (
+                      {permiteEdicaoCompleta && (
                         <>
                           <button
                             onClick={() => abrirModalEdicao(item)}
@@ -691,6 +774,10 @@ function HistoricoContent() {
               <div>
                 <label className="text-sm font-semibold text-slate-600">Nome do cliente</label>
                 <input type="text" value={editCliente} onChange={(e) => setEditCliente(e.target.value)} className="w-full mt-1 px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" required />
+              </div>
+              <div>
+                <label className="text-sm font-semibold text-slate-600">Telefone / WhatsApp</label>
+                <input type="tel" value={editTelefone} onChange={(e) => setEditTelefone(e.target.value)} className="w-full mt-1 px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
