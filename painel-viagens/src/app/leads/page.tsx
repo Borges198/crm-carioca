@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Timestamp } from 'firebase/firestore';
 import AuthGuard from '../../components/AuthGuard';
 import EmptyState from '../../components/EmptyState';
@@ -19,7 +19,10 @@ import {
   type LeadStatus,
   type ProdutoOfertado,
 } from '../../lib/leadUtils';
-import { converterCotacaoFechadaEmCliente } from '../../utils/clienteConversionUtils';
+import {
+  converterCotacaoFechadaEmCliente,
+  normalizarTelefoneCliente,
+} from '../../utils/clienteConversionUtils';
 import { filterBySearch, normalizeSearchText } from '../../utils/searchUtils';
 
 type FiltroStatus = 'abertos' | 'sem_status' | LeadStatus;
@@ -28,7 +31,7 @@ type CotacaoComHorariosVolta = Cotacao & {
   horaChegadaVolta?: string;
 };
 
-interface LeadOpportunity {
+export interface LeadOpportunity {
   id: string;
   cotacoes: Cotacao[];
   cliente: string;
@@ -64,10 +67,6 @@ function normalizarTexto(valor?: string | null) {
   return (valor ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
-function normalizarTelefoneLocal(telefone?: string | null) {
-  return (telefone ?? '').replace(/\D/g, '');
-}
-
 function getTime(data: Cotacao['dataRegistro']) {
   if (!data) return 0;
   if (typeof (data as Timestamp).toDate === 'function') {
@@ -77,9 +76,9 @@ function getTime(data: Cotacao['dataRegistro']) {
   return Number.isNaN(time) ? 0 : time;
 }
 
-function montarChaveOportunidade(cotacao: Cotacao) {
+export function montarChaveOportunidade(cotacao: Cotacao) {
   const identificadorCliente = cotacao.telefoneNormalizado
-    || normalizarTelefoneLocal(cotacao.telefone)
+    || normalizarTelefoneCliente(cotacao.telefone)
     || normalizarTexto(cotacao.cliente);
 
   return [
@@ -96,7 +95,7 @@ function ordenarPorRegistroMaisRecente(a: Cotacao, b: Cotacao) {
   return getTime(b.dataRegistro) - getTime(a.dataRegistro);
 }
 
-function agruparCotacoesEmOportunidades(cotacoes: Cotacao[]): LeadOpportunity[] {
+export function agruparCotacoesEmOportunidades(cotacoes: Cotacao[]): LeadOpportunity[] {
   const grupos = new Map<string, Cotacao[]>();
 
   cotacoes.forEach((cotacao) => {
@@ -137,6 +136,189 @@ function agruparCotacoesEmOportunidades(cotacoes: Cotacao[]): LeadOpportunity[] 
     .sort((a, b) => ordenarPorRegistroMaisRecente(a.cotacaoMaisRecente, b.cotacaoMaisRecente));
 }
 
+export function montarCamposPesquisaOportunidade(oportunidade: LeadOpportunity) {
+  return [
+    oportunidade.cliente,
+    oportunidade.telefone,
+    oportunidade.origem,
+    oportunidade.destino,
+    oportunidade.dataIda,
+    oportunidade.dataVolta,
+    oportunidade.cotacaoMaisRecente.leadStatus,
+    oportunidade.menorValor,
+    oportunidade.maiorValor,
+    ...oportunidade.produtosOfertados,
+    oportunidade.observacao,
+    ...oportunidade.cotacoes.flatMap((cotacao) => [
+      cotacao.telefone,
+      cotacao.telefoneNormalizado,
+      cotacao.companhia,
+      cotacao.companhiaIda,
+      cotacao.companhiaVolta,
+      ...(cotacao.produtosOfertados ?? []),
+      cotacao.observacao,
+      cotacao.leadStatus,
+      cotacao.valorTotal,
+    ]),
+  ];
+}
+
+export function montarPayloadTelefoneCotacao(telefone: string) {
+  return {
+    telefone,
+    telefoneNormalizado: normalizarTelefoneCliente(telefone),
+  };
+}
+
+export function atualizarTelefoneCotacaoPorId(
+  cotacoes: Cotacao[],
+  cotacaoId: string,
+  telefone: string
+) {
+  const dadosAtualizados = montarPayloadTelefoneCotacao(telefone);
+  return cotacoes.map((cotacao) => (
+    cotacao.id === cotacaoId ? { ...cotacao, ...dadosAtualizados } : cotacao
+  ));
+}
+
+export async function persistirTelefoneCotacao(
+  cotacaoId: string,
+  telefone: string,
+  atualizar: typeof atualizarCotacao = atualizarCotacao
+) {
+  const dadosAtualizados = montarPayloadTelefoneCotacao(telefone);
+  await atualizar(cotacaoId, dadosAtualizados);
+  return dadosAtualizados;
+}
+
+export interface IdentidadeSessaoLeads {
+  userId: string | undefined;
+  geracao: number;
+}
+
+export interface SessaoInteracaoLeads {
+  identidade: IdentidadeSessaoLeads;
+  usuario: { uid: string };
+}
+
+interface SessaoPodeMutarLeadsParams {
+  userAtual: { uid: string } | null | undefined;
+  sessaoInstalada: SessaoInteracaoLeads | null;
+  identidadePublicada: IdentidadeSessaoLeads;
+  identidadeRefAtual: IdentidadeSessaoLeads;
+  identidadeCapturada?: IdentidadeSessaoLeads;
+  ownerId?: string;
+  cotacaoAindaValida?: boolean;
+}
+
+export function identidadeSessaoLeadsCorresponde(
+  atual: IdentidadeSessaoLeads,
+  capturada: IdentidadeSessaoLeads
+) {
+  return atual.userId === capturada.userId
+    && atual.geracao === capturada.geracao;
+}
+
+export function avancarIdentidadeSessaoLeads(
+  atual: IdentidadeSessaoLeads,
+  userId: string | undefined
+): IdentidadeSessaoLeads {
+  return {
+    userId,
+    geracao: atual.geracao + 1,
+  };
+}
+
+export function sessaoLeadsProntaParaInteracao(
+  usuario: { uid: string } | null | undefined,
+  sessaoInstalada: SessaoInteracaoLeads | null,
+  identidadePublicada: IdentidadeSessaoLeads,
+  identidadeRefAtual: IdentidadeSessaoLeads
+) {
+  return sessaoPodeMutarLeads({
+    userAtual: usuario,
+    sessaoInstalada,
+    identidadePublicada,
+    identidadeRefAtual,
+  });
+}
+
+export function sessaoPodeMutarLeads({
+  userAtual,
+  sessaoInstalada,
+  identidadePublicada,
+  identidadeRefAtual,
+  identidadeCapturada,
+  ownerId,
+  cotacaoAindaValida = true,
+}: SessaoPodeMutarLeadsParams) {
+  return Boolean(
+    userAtual
+    && sessaoInstalada
+    && sessaoInstalada.usuario === userAtual
+    && sessaoInstalada.identidade.userId === userAtual.uid
+    && identidadeSessaoLeadsCorresponde(
+      sessaoInstalada.identidade,
+      identidadePublicada
+    )
+    && identidadeSessaoLeadsCorresponde(
+      sessaoInstalada.identidade,
+      identidadeRefAtual
+    )
+    && (
+      !identidadeCapturada
+      || identidadeSessaoLeadsCorresponde(
+        identidadeCapturada,
+        identidadeRefAtual
+      )
+    )
+    && (ownerId === undefined || ownerId === userAtual.uid)
+    && cotacaoAindaValida
+  );
+}
+
+export function podeIniciarMutacaoCotacao(
+  cotacao: Cotacao,
+  usuario: { uid: string } | null | undefined,
+  sessaoInstalada: SessaoInteracaoLeads | null,
+  identidadePublicada: IdentidadeSessaoLeads,
+  identidadeRefAtual: IdentidadeSessaoLeads,
+  cotacaoAindaValida = true
+) {
+  return sessaoPodeMutarLeads({
+    userAtual: usuario,
+    sessaoInstalada,
+    identidadePublicada,
+    identidadeRefAtual,
+    ownerId: cotacao.ownerId,
+    cotacaoAindaValida,
+  });
+}
+
+export const podeIniciarEdicaoTelefone = podeIniciarMutacaoCotacao;
+
+export function montarPayloadEdicaoComercial(
+  leadStatus: LeadStatus,
+  produtosOfertados: ProdutoOfertado[],
+  observacao: string
+) {
+  return {
+    leadStatus,
+    produtosOfertados,
+    observacao: observacao.trim(),
+  };
+}
+
+export function atualizarCotacaoComercialPorId(
+  cotacoes: Cotacao[],
+  cotacaoId: string,
+  dadosComerciais: ReturnType<typeof montarPayloadEdicaoComercial>
+) {
+  return cotacoes.map((item) => (
+    item.id === cotacaoId ? { ...item, ...dadosComerciais } : item
+  ));
+}
+
 function formatarCompanhias(cotacao: Cotacao) {
   if (cotacao.companhiaIda || cotacao.companhiaVolta) {
     const ida = cotacao.companhiaIda || cotacao.companhia;
@@ -173,6 +355,20 @@ function normalizarProdutosOfertados(produtos?: string[]): ProdutoOfertado[] {
 
 function LeadsContent() {
   const { user, accessProfile, profileLoading } = useAuth();
+  const userId = user?.uid;
+  const identidadeSessaoRef = useRef<IdentidadeSessaoLeads>({
+    userId: undefined,
+    geracao: 0,
+  });
+  const [identidadeSessaoAtual, setIdentidadeSessaoAtual] = useState<IdentidadeSessaoLeads>({
+    userId: undefined,
+    geracao: 0,
+  });
+  const [identidadeRefAtualVisual, setIdentidadeRefAtualVisual] = useState<IdentidadeSessaoLeads>({
+    userId: undefined,
+    geracao: 0,
+  });
+  const [sessaoInteracao, setSessaoInteracao] = useState<SessaoInteracaoLeads | null>(null);
   const [cotacoes, setCotacoes] = useState<Cotacao[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [filtroStatus, setFiltroStatus] = useState<FiltroStatus>('abertos');
@@ -184,6 +380,105 @@ function LeadsContent() {
   const [editLeadStatus, setEditLeadStatus] = useState<LeadStatus>('novo');
   const [editProdutosOfertados, setEditProdutosOfertados] = useState<ProdutoOfertado[]>([]);
   const [editObservacao, setEditObservacao] = useState('');
+  const [modalTelefoneAberto, setModalTelefoneAberto] = useState(false);
+  const [cotacaoTelefoneEmEdicao, setCotacaoTelefoneEmEdicao] = useState<Cotacao | null>(null);
+  const [editTelefone, setEditTelefone] = useState('');
+  const [salvandoTelefone, setSalvandoTelefone] = useState(false);
+  const [salvandoComercial, setSalvandoComercial] = useState(false);
+  const sessaoProntaParaInteracao = sessaoLeadsProntaParaInteracao(
+    user ?? undefined,
+    sessaoInteracao,
+    identidadeSessaoAtual,
+    identidadeRefAtualVisual
+  );
+
+  useLayoutEffect(() => {
+    const identidadeSessao = avancarIdentidadeSessaoLeads(
+      identidadeSessaoRef.current,
+      userId
+    );
+    identidadeSessaoRef.current = identidadeSessao;
+    setIdentidadeRefAtualVisual(identidadeSessao);
+
+    return () => {
+      if (identidadeSessaoLeadsCorresponde(
+        identidadeSessaoRef.current,
+        identidadeSessao
+      )) {
+        identidadeSessaoRef.current = avancarIdentidadeSessaoLeads(
+          identidadeSessao,
+          undefined
+        );
+        setIdentidadeRefAtualVisual(identidadeSessaoRef.current);
+      }
+    };
+  }, [user, userId]);
+
+  useEffect(() => {
+    const identidadeSessao = identidadeSessaoRef.current;
+    let instalacaoAtiva = true;
+
+    queueMicrotask(() => {
+      if (
+        instalacaoAtiva
+        && user
+        && identidadeSessaoLeadsCorresponde(
+          identidadeSessaoRef.current,
+          identidadeSessao
+        )
+      ) {
+        setIdentidadeSessaoAtual(identidadeSessao);
+        setSessaoInteracao({
+          identidade: identidadeSessao,
+          usuario: user,
+        });
+        setModalTelefoneAberto(false);
+        setCotacaoTelefoneEmEdicao(null);
+        setEditTelefone('');
+        setSalvandoTelefone(false);
+        setModalComercialAberto(false);
+        setCotacaoComercialEmEdicao(null);
+        setEditLeadStatus('novo');
+        setEditProdutosOfertados([]);
+        setEditObservacao('');
+        setSalvandoComercial(false);
+        setOportunidadeEmConversaoId(null);
+        setClientesAdicionadosIds([]);
+      }
+    });
+
+    return () => {
+      instalacaoAtiva = false;
+      queueMicrotask(() => {
+        setIdentidadeSessaoAtual((identidadeAtual) => (
+          identidadeSessaoLeadsCorresponde(identidadeAtual, identidadeSessao)
+            ? identidadeSessaoRef.current
+            : identidadeAtual
+        ));
+        setSessaoInteracao((sessaoAtual) => (
+          sessaoAtual
+          && identidadeSessaoLeadsCorresponde(
+            sessaoAtual.identidade,
+            identidadeSessao
+          )
+            ? null
+            : sessaoAtual
+        ));
+        setModalTelefoneAberto(false);
+        setCotacaoTelefoneEmEdicao(null);
+        setEditTelefone('');
+        setSalvandoTelefone(false);
+        setModalComercialAberto(false);
+        setCotacaoComercialEmEdicao(null);
+        setEditLeadStatus('novo');
+        setEditProdutosOfertados([]);
+        setEditObservacao('');
+        setSalvandoComercial(false);
+        setOportunidadeEmConversaoId(null);
+        setClientesAdicionadosIds([]);
+      });
+    };
+  }, [user, userId]);
 
   useEffect(() => {
     if (!user) return;
@@ -238,35 +533,111 @@ function LeadsContent() {
 
   const termoPesquisaNormalizado = normalizeSearchText(termoPesquisa);
   const oportunidadesPesquisadas = useMemo(() => (
-    filterBySearch(oportunidades, termoPesquisa, (oportunidade) => [
-      oportunidade.cliente,
-      oportunidade.telefone,
-      oportunidade.origem,
-      oportunidade.destino,
-      oportunidade.dataIda,
-      oportunidade.dataVolta,
-      oportunidade.cotacaoMaisRecente.leadStatus,
-      oportunidade.menorValor,
-      oportunidade.maiorValor,
-      ...oportunidade.produtosOfertados,
-      oportunidade.observacao,
-      ...oportunidade.cotacoes.flatMap((cotacao) => [
-        cotacao.companhia,
-        cotacao.companhiaIda,
-        cotacao.companhiaVolta,
-        ...(cotacao.produtosOfertados ?? []),
-        cotacao.observacao,
-        cotacao.leadStatus,
-        cotacao.valorTotal,
-      ]),
-    ])
+    filterBySearch(oportunidades, termoPesquisa, montarCamposPesquisaOportunidade)
   ), [oportunidades, termoPesquisa]);
 
   const totalAbertos = cotacoes.filter((cotacao) => isLeadStatusAberto(cotacao.leadStatus)).length;
   const totalPerdidos = cotacoes.filter((cotacao) => cotacao.leadStatus === 'perdido').length;
   const totalFechados = cotacoes.filter((cotacao) => cotacao.leadStatus === 'fechado').length;
 
+  const abrirModalTelefone = (cotacao: Cotacao) => {
+    if (!podeIniciarEdicaoTelefone(
+      cotacao,
+      user ?? undefined,
+      sessaoInteracao,
+      identidadeSessaoAtual,
+      identidadeSessaoRef.current,
+      cotacoes.some((item) => item.id === cotacao.id)
+    )) return;
+
+    setCotacaoTelefoneEmEdicao(cotacao);
+    setEditTelefone(cotacao.telefone ?? '');
+    setModalTelefoneAberto(true);
+  };
+
+  const fecharModalTelefone = () => {
+    if (salvandoTelefone) return;
+    setModalTelefoneAberto(false);
+    setCotacaoTelefoneEmEdicao(null);
+  };
+
+  const salvarTelefone = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (
+      !cotacaoTelefoneEmEdicao
+      || !podeIniciarEdicaoTelefone(
+        cotacaoTelefoneEmEdicao,
+        user ?? undefined,
+        sessaoInteracao,
+        identidadeSessaoAtual,
+        identidadeSessaoRef.current,
+        cotacoes.some((item) => item.id === cotacaoTelefoneEmEdicao.id)
+      )
+    ) return;
+
+    const cotacaoId = cotacaoTelefoneEmEdicao.id;
+    const ownerId = cotacaoTelefoneEmEdicao.ownerId;
+    const identidadeMutacao = { ...identidadeSessaoRef.current };
+    setSalvandoTelefone(true);
+
+    try {
+      await persistirTelefoneCotacao(cotacaoId, editTelefone);
+      if (!sessaoPodeMutarLeads({
+        userAtual: user,
+        sessaoInstalada: sessaoInteracao,
+        identidadePublicada: identidadeSessaoAtual,
+        identidadeRefAtual: identidadeSessaoRef.current,
+        identidadeCapturada: identidadeMutacao,
+        ownerId,
+        cotacaoAindaValida: cotacoes.some((item) => item.id === cotacaoId),
+      })) return;
+
+      setCotacoes((cotacoesAtuais) => (
+        cotacoesAtuais.some((item) => item.id === cotacaoId && item.ownerId === userId)
+          ? atualizarTelefoneCotacaoPorId(cotacoesAtuais, cotacaoId, editTelefone)
+          : cotacoesAtuais
+      ));
+      setModalTelefoneAberto(false);
+      setCotacaoTelefoneEmEdicao(null);
+      setEditTelefone('');
+    } catch (error) {
+      if (!sessaoPodeMutarLeads({
+        userAtual: user,
+        sessaoInstalada: sessaoInteracao,
+        identidadePublicada: identidadeSessaoAtual,
+        identidadeRefAtual: identidadeSessaoRef.current,
+        identidadeCapturada: identidadeMutacao,
+        ownerId,
+        cotacaoAindaValida: cotacoes.some((item) => item.id === cotacaoId),
+      })) return;
+
+      console.error('Erro ao salvar telefone da cotação:', error);
+      alert('Erro ao salvar telefone.');
+    } finally {
+      if (sessaoPodeMutarLeads({
+        userAtual: user,
+        sessaoInstalada: sessaoInteracao,
+        identidadePublicada: identidadeSessaoAtual,
+        identidadeRefAtual: identidadeSessaoRef.current,
+        identidadeCapturada: identidadeMutacao,
+        ownerId,
+        cotacaoAindaValida: cotacoes.some((item) => item.id === cotacaoId),
+      })) {
+        setSalvandoTelefone(false);
+      }
+    }
+  };
+
   const abrirModalComercial = (item: Cotacao) => {
+    if (!podeIniciarMutacaoCotacao(
+      item,
+      user,
+      sessaoInteracao,
+      identidadeSessaoAtual,
+      identidadeSessaoRef.current,
+      cotacoes.some((cotacao) => cotacao.id === item.id)
+    )) return;
+
     setCotacaoComercialEmEdicao(item);
     setEditLeadStatus(normalizarLeadStatus(item.leadStatus));
     setEditProdutosOfertados(normalizarProdutosOfertados(item.produtosOfertados));
@@ -275,6 +646,7 @@ function LeadsContent() {
   };
 
   const fecharModalComercial = () => {
+    if (salvandoComercial) return;
     setModalComercialAberto(false);
     setCotacaoComercialEmEdicao(null);
   };
@@ -289,35 +661,89 @@ function LeadsContent() {
 
   const salvarEdicaoComercial = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!cotacaoComercialEmEdicao) return;
+    if (
+      !cotacaoComercialEmEdicao
+      || !podeIniciarMutacaoCotacao(
+        cotacaoComercialEmEdicao,
+        user,
+        sessaoInteracao,
+        identidadeSessaoAtual,
+        identidadeSessaoRef.current,
+        cotacoes.some((item) => item.id === cotacaoComercialEmEdicao.id)
+      )
+    ) return;
 
-    const dadosComerciais = {
-      leadStatus: editLeadStatus,
-      produtosOfertados: editProdutosOfertados,
-      observacao: editObservacao.trim(),
-    };
+    const cotacaoId = cotacaoComercialEmEdicao.id;
+    const ownerId = cotacaoComercialEmEdicao.ownerId;
+    const identidadeMutacao = { ...identidadeSessaoRef.current };
+    const dadosComerciais = montarPayloadEdicaoComercial(
+      editLeadStatus,
+      editProdutosOfertados,
+      editObservacao
+    );
+    setSalvandoComercial(true);
 
     try {
-      await atualizarCotacao(cotacaoComercialEmEdicao.id, dadosComerciais);
+      await atualizarCotacao(cotacaoId, dadosComerciais);
+      if (!sessaoPodeMutarLeads({
+        userAtual: user,
+        sessaoInstalada: sessaoInteracao,
+        identidadePublicada: identidadeSessaoAtual,
+        identidadeRefAtual: identidadeSessaoRef.current,
+        identidadeCapturada: identidadeMutacao,
+        ownerId,
+        cotacaoAindaValida: cotacoes.some((item) => item.id === cotacaoId),
+      })) return;
 
-      setCotacoes(prev => prev.map(item =>
-        item.id === cotacaoComercialEmEdicao.id ? { ...item, ...dadosComerciais } : item
+      setCotacoes((cotacoesAtuais) => (
+        cotacoesAtuais.some((item) => item.id === cotacaoId && item.ownerId === userId)
+          ? atualizarCotacaoComercialPorId(cotacoesAtuais, cotacaoId, dadosComerciais)
+          : cotacoesAtuais
       ));
 
-      fecharModalComercial();
+      setModalComercialAberto(false);
+      setCotacaoComercialEmEdicao(null);
     } catch (error) {
+      if (!sessaoPodeMutarLeads({
+        userAtual: user,
+        sessaoInstalada: sessaoInteracao,
+        identidadePublicada: identidadeSessaoAtual,
+        identidadeRefAtual: identidadeSessaoRef.current,
+        identidadeCapturada: identidadeMutacao,
+        ownerId,
+        cotacaoAindaValida: cotacoes.some((item) => item.id === cotacaoId),
+      })) return;
+
       console.error('Erro ao salvar dados comerciais:', error);
       alert('Erro ao salvar dados comerciais.');
+    } finally {
+      if (sessaoPodeMutarLeads({
+        userAtual: user,
+        sessaoInstalada: sessaoInteracao,
+        identidadePublicada: identidadeSessaoAtual,
+        identidadeRefAtual: identidadeSessaoRef.current,
+        identidadeCapturada: identidadeMutacao,
+        ownerId,
+        cotacaoAindaValida: cotacoes.some((item) => item.id === cotacaoId),
+      })) {
+        setSalvandoComercial(false);
+      }
     }
   };
 
   const adicionarOportunidadeAosClientes = async (oportunidade: LeadOpportunity) => {
-    if (!user) {
-      alert('Você precisa estar logado para adicionar um cliente.');
-      return;
-    }
+    if (!user) return;
 
     const cotacaoReferencia = oportunidade.cotacaoMaisRecente;
+    if (!podeIniciarMutacaoCotacao(
+      cotacaoReferencia,
+      user,
+      sessaoInteracao,
+      identidadeSessaoAtual,
+      identidadeSessaoRef.current,
+      cotacoes.some((item) => item.id === cotacaoReferencia.id)
+    )) return;
+
     if (cotacaoReferencia.leadStatus !== 'fechado') {
       alert('Somente oportunidades marcadas como fechado podem virar cliente.');
       return;
@@ -329,21 +755,35 @@ function LeadsContent() {
       return;
     }
 
+    const identidadeMutacao = { ...identidadeSessaoRef.current };
+    const userIdMutacao = user.uid;
+    const operacaoAindaValida = () => sessaoPodeMutarLeads({
+      userAtual: user,
+      sessaoInstalada: sessaoInteracao,
+      identidadePublicada: identidadeSessaoAtual,
+      identidadeRefAtual: identidadeSessaoRef.current,
+      identidadeCapturada: identidadeMutacao,
+      ownerId: cotacaoReferencia.ownerId,
+      cotacaoAindaValida: cotacoes.some((item) => item.id === cotacaoReferencia.id),
+    });
+    if (!operacaoAindaValida()) return;
     setOportunidadeEmConversaoId(oportunidade.id);
 
     try {
-      const clientesExistentes = await listarClientesDoUsuario(user.uid);
+      const clientesExistentes = await listarClientesDoUsuario(userIdMutacao);
+      if (!operacaoAindaValida()) return;
       const agencyIdParaCriacao = profileLoading
         ? ''
         : accessProfile.agencyId ?? DEFAULT_AGENCY_ID;
       const resultado = await converterCotacaoFechadaEmCliente({
         cotacao: cotacaoReferencia,
-        userId: user.uid,
+        userId: userIdMutacao,
         agencyId: agencyIdParaCriacao,
         formatarData,
         clientesExistentes,
         criarCliente,
       });
+      if (!operacaoAindaValida()) return;
 
       if (resultado.status === 'duplicate') {
         alert('Este cliente já existe na carteira.');
@@ -363,10 +803,13 @@ function LeadsContent() {
       setClientesAdicionadosIds((ids) => [...ids, oportunidade.id]);
       alert('Cliente adicionado à carteira com sucesso.');
     } catch (error) {
+      if (!operacaoAindaValida()) return;
       console.error('Erro ao adicionar cliente a partir da oportunidade:', error);
       alert('Erro ao adicionar cliente.');
     } finally {
-      setOportunidadeEmConversaoId(null);
+      if (operacaoAindaValida()) {
+        setOportunidadeEmConversaoId(null);
+      }
     }
   };
 
@@ -500,7 +943,8 @@ function LeadsContent() {
                   {oportunidade.cotacoes.length} {oportunidade.cotacoes.length === 1 ? 'cotação relacionada' : 'cotações relacionadas'}
                 </p>
 
-                {oportunidade.cotacaoMaisRecente.leadStatus === 'fechado' && (
+                {sessaoProntaParaInteracao
+                  && oportunidade.cotacaoMaisRecente.leadStatus === 'fechado' && (
                   <div className="mt-4">
                     <button
                       type="button"
@@ -551,6 +995,7 @@ function LeadsContent() {
                           <div>
                             <p className="text-sm font-black text-slate-800">{formatarCompanhias(cotacao)}</p>
                             <div className="mt-1 space-y-0.5 text-xs font-semibold text-slate-500">
+                              <p>Telefone: {cotacao.telefone || 'Sem telefone'}</p>
                               {horarioIda && <p>{horarioIda}</p>}
                               {horarioVolta && <p>{horarioVolta}</p>}
                               {!horarioIda && !horarioVolta && <p>Horários não informados</p>}
@@ -565,13 +1010,36 @@ function LeadsContent() {
                         </div>
 
                         <div className="mt-3 flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() => abrirModalComercial(cotacao)}
-                            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black uppercase text-slate-700 transition hover:bg-slate-100"
-                          >
-                            Editar comercial
-                          </button>
+                          {podeIniciarMutacaoCotacao(
+                            cotacao,
+                            user,
+                            sessaoInteracao,
+                            identidadeSessaoAtual,
+                            identidadeRefAtualVisual
+                          ) && (
+                            <button
+                              type="button"
+                              onClick={() => abrirModalComercial(cotacao)}
+                              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black uppercase text-slate-700 transition hover:bg-slate-100"
+                            >
+                              Editar comercial
+                            </button>
+                          )}
+                          {podeIniciarMutacaoCotacao(
+                            cotacao,
+                            user,
+                            sessaoInteracao,
+                            identidadeSessaoAtual,
+                            identidadeRefAtualVisual
+                          ) && (
+                            <button
+                              type="button"
+                              onClick={() => abrirModalTelefone(cotacao)}
+                              className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black uppercase text-blue-700 transition hover:bg-blue-100"
+                            >
+                              Editar telefone
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
@@ -583,7 +1051,71 @@ function LeadsContent() {
         )}
       </div>
 
-      {modalComercialAberto && (
+      {sessaoProntaParaInteracao
+        && modalTelefoneAberto
+        && cotacaoTelefoneEmEdicao && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <h2 className="text-xl font-bold text-slate-800">Editar telefone da cotação</h2>
+            <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
+              <p className="font-black text-slate-800">{formatarCompanhias(cotacaoTelefoneEmEdicao)}</p>
+              <p className="mt-1 font-semibold">
+                {cotacaoTelefoneEmEdicao.origem} → {cotacaoTelefoneEmEdicao.destino}
+              </p>
+              <p className="mt-1">
+                {formatarData(cotacaoTelefoneEmEdicao.dataIda)}
+                {' · '}
+                {formatarValor(cotacaoTelefoneEmEdicao.valorTotal)}
+              </p>
+              <p className="mt-1 text-xs font-semibold">
+                {formatarHorario(
+                  'Ida',
+                  cotacaoTelefoneEmEdicao.horaSaidaIda,
+                  cotacaoTelefoneEmEdicao.horaChegadaIda
+                ) || 'Horário não informado'}
+              </p>
+              {oportunidades.some(
+                (oportunidade) => oportunidade.cotacaoMaisRecente.id === cotacaoTelefoneEmEdicao.id
+              ) && (
+                <p className="mt-2 text-xs font-black uppercase text-blue-700">Cotação mais recente</p>
+              )}
+            </div>
+
+            <form onSubmit={salvarTelefone} className="mt-5 flex flex-col gap-4">
+              <label className="block">
+                <span className="text-sm font-semibold text-slate-600">Telefone / WhatsApp</span>
+                <input
+                  type="tel"
+                  value={editTelefone}
+                  onChange={(e) => setEditTelefone(e.target.value)}
+                  className="mt-1 w-full rounded-lg border px-4 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={salvandoTelefone || !sessaoProntaParaInteracao}
+                />
+              </label>
+
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={fecharModalTelefone}
+                  disabled={salvandoTelefone || !sessaoProntaParaInteracao}
+                  className="rounded-lg px-4 py-2 font-semibold text-slate-500 hover:bg-slate-100 disabled:opacity-60"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={salvandoTelefone || !sessaoProntaParaInteracao}
+                  className="rounded-lg bg-blue-600 px-6 py-2 font-bold text-white shadow-md hover:bg-blue-700 disabled:opacity-60"
+                >
+                  {salvandoTelefone ? 'Salvando...' : 'Salvar telefone'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {sessaoProntaParaInteracao && modalComercialAberto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
             <h2 className="mb-1 text-xl font-bold text-slate-800">Editar comercial</h2>
@@ -597,6 +1129,7 @@ function LeadsContent() {
                 <select
                   value={editLeadStatus}
                   onChange={(e) => setEditLeadStatus(e.target.value as LeadStatus)}
+                  disabled={salvandoComercial || !sessaoProntaParaInteracao}
                   className="mt-1 w-full rounded-lg border bg-white px-4 py-2 outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   {LEAD_STATUS_OPTIONS.map((status) => (
@@ -614,6 +1147,7 @@ function LeadsContent() {
                         type="checkbox"
                         checked={editProdutosOfertados.includes(produto.value)}
                         onChange={() => alternarProdutoOfertado(produto.value)}
+                        disabled={salvandoComercial || !sessaoProntaParaInteracao}
                         className="h-4 w-4 rounded border-slate-300 text-blue-600"
                       />
                       <span>{produto.label}</span>
@@ -627,17 +1161,18 @@ function LeadsContent() {
                 <textarea
                   value={editObservacao}
                   onChange={(e) => setEditObservacao(e.target.value)}
+                  disabled={salvandoComercial || !sessaoProntaParaInteracao}
                   className="mt-1 min-h-28 w-full rounded-lg border px-4 py-2 outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Observações internas sobre o acompanhamento"
                 />
               </label>
 
               <div className="mt-2 flex justify-end gap-3">
-                <button type="button" onClick={fecharModalComercial} className="rounded-lg px-4 py-2 font-semibold text-slate-500 hover:bg-slate-100">
+                <button type="button" onClick={fecharModalComercial} disabled={salvandoComercial || !sessaoProntaParaInteracao} className="rounded-lg px-4 py-2 font-semibold text-slate-500 hover:bg-slate-100 disabled:opacity-60">
                   Cancelar
                 </button>
-                <button type="submit" className="rounded-lg bg-blue-600 px-6 py-2 font-bold text-white shadow-md hover:bg-blue-700">
-                  Salvar comercial
+                <button type="submit" disabled={salvandoComercial || !sessaoProntaParaInteracao} className="rounded-lg bg-blue-600 px-6 py-2 font-bold text-white shadow-md hover:bg-blue-700 disabled:opacity-60">
+                  {salvandoComercial ? 'Salvando...' : 'Salvar comercial'}
                 </button>
               </div>
             </form>
