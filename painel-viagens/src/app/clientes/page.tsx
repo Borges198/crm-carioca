@@ -1,15 +1,184 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import { Timestamp } from 'firebase/firestore';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { Timestamp, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import AuthGuard from '../../components/AuthGuard';
 import EmptyState from '../../components/EmptyState';
 import SearchInput from '../../components/SearchInput';
 import { useAuth } from '../../context/AuthContext';
-import { atualizarCliente, criarCliente, excluirCliente as excluirClienteFirestore, listarClientesDoUsuario } from '../../services/clientesService';
+import {
+  atualizarCliente,
+  criarCliente,
+  excluirCliente as excluirClienteFirestore,
+  listarClientesDoUsuario,
+  listarPaginaClientesDoUsuario,
+} from '../../services/clientesService';
 import { DEFAULT_AGENCY_ID } from '../../types';
 import type { Cliente, NovoCliente } from '../../types';
 import { filterBySearch, normalizeSearchText } from '../../utils/searchUtils';
+
+const DEBOUNCE_PESQUISA_CLIENTES_MS = 400;
+
+interface EstadoListaClientes {
+  userId: string;
+  geracao: number;
+  clientes: Cliente[];
+  ultimoDocumento: QueryDocumentSnapshot<DocumentData> | null;
+  temMais: boolean;
+}
+
+interface CachePesquisaClientes {
+  userId: string;
+  geracao: number;
+  clientes: Cliente[];
+}
+
+interface PesquisaClientesEmAndamento {
+  userId: string;
+  geracao: number;
+  promise: Promise<Cliente[]>;
+  versaoMutacoes: number;
+}
+
+export type MutacaoCliente =
+  | { tipo: 'criar'; cliente: Cliente }
+  | { tipo: 'editar'; id: string; dados: Partial<Cliente> }
+  | { tipo: 'excluir'; id: string };
+
+export interface RegistroMutacoesClientes {
+  userId: string;
+  geracao: number;
+  versao: number;
+  mutacoes: Array<MutacaoCliente & { versao: number }>;
+}
+
+export interface IdentidadeSessaoClientes {
+  userId: string | undefined;
+  geracao: number;
+}
+
+export function concatenarClientesPorId(atuais: Cliente[], novos: Cliente[]) {
+  const clientesPorId = new Map(atuais.map((cliente) => [cliente.id, cliente]));
+  novos.forEach((cliente) => clientesPorId.set(cliente.id, cliente));
+  return Array.from(clientesPorId.values());
+}
+
+export function inserirClienteNoInicio(clientes: Cliente[], novoCliente: Cliente) {
+  return [novoCliente, ...clientes.filter((cliente) => cliente.id !== novoCliente.id)];
+}
+
+export function atualizarClientePorId(
+  clientes: Cliente[],
+  id: string,
+  dados: Partial<Cliente>
+) {
+  return clientes.map((cliente) => (
+    cliente.id === id ? { ...cliente, ...dados } : cliente
+  ));
+}
+
+export function removerClientePorId(clientes: Cliente[], id: string) {
+  return clientes.filter((cliente) => cliente.id !== id);
+}
+
+export function estadoPertenceAoUsuario(
+  estadoUserId: string | undefined,
+  userIdAtual: string | undefined
+) {
+  return Boolean(estadoUserId && userIdAtual && estadoUserId === userIdAtual);
+}
+
+export function identidadeSessaoCorresponde(
+  atual: IdentidadeSessaoClientes,
+  capturada: IdentidadeSessaoClientes
+) {
+  return atual.userId === capturada.userId && atual.geracao === capturada.geracao;
+}
+
+export function selecionarFonteClientes(
+  clientesPaginados: Cliente[],
+  cachePesquisa: CachePesquisaClientes | null,
+  userId: string | undefined,
+  geracao: number,
+  pesquisaAtiva: boolean
+) {
+  if (
+    pesquisaAtiva
+    && estadoPertenceAoUsuario(cachePesquisa?.userId, userId)
+    && cachePesquisa?.geracao === geracao
+    && cachePesquisa
+  ) {
+    return cachePesquisa.clientes;
+  }
+
+  return clientesPaginados;
+}
+
+export function obterPesquisaClientesEmAndamento(
+  pesquisaAtual: PesquisaClientesEmAndamento | null,
+  userId: string,
+  geracao: number,
+  versaoMutacoes: number,
+  carregar: (userId: string) => Promise<Cliente[]>
+): PesquisaClientesEmAndamento {
+  if (pesquisaAtual?.userId === userId && pesquisaAtual.geracao === geracao) {
+    return pesquisaAtual;
+  }
+
+  return {
+    userId,
+    geracao,
+    promise: carregar(userId),
+    versaoMutacoes,
+  };
+}
+
+export function registrarMutacaoCliente(
+  registroAtual: RegistroMutacoesClientes | null,
+  userId: string,
+  geracao: number,
+  mutacao: MutacaoCliente
+): RegistroMutacoesClientes {
+  const registroDoUsuario = registroAtual?.userId === userId
+    && registroAtual.geracao === geracao
+    ? registroAtual
+    : { userId, geracao, versao: 0, mutacoes: [] };
+  const novaVersao = registroDoUsuario.versao + 1;
+
+  return {
+    userId,
+    geracao,
+    versao: novaVersao,
+    mutacoes: [
+      ...registroDoUsuario.mutacoes,
+      { ...mutacao, versao: novaVersao },
+    ],
+  };
+}
+
+export function reconciliarClientesComMutacoes(
+  clientes: Cliente[],
+  registro: RegistroMutacoesClientes | null,
+  userId: string,
+  geracao: number,
+  versaoInicial: number
+) {
+  if (registro?.userId !== userId || registro.geracao !== geracao) {
+    return clientes;
+  }
+
+  return registro.mutacoes
+    .filter((mutacao) => mutacao.versao > versaoInicial)
+    .reduce((clientesAtuais, mutacao) => {
+      if (mutacao.tipo === 'criar') {
+        return inserirClienteNoInicio(clientesAtuais, mutacao.cliente);
+      }
+      if (mutacao.tipo === 'editar') {
+        return atualizarClientePorId(clientesAtuais, mutacao.id, mutacao.dados);
+      }
+      return removerClientePorId(clientesAtuais, mutacao.id);
+    }, clientes);
+}
 
 export default function Clientes() {
   return (
@@ -21,9 +190,24 @@ export default function Clientes() {
 
 function ClientesContent() {
   const { user, accessProfile } = useAuth();
-  const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [carregando, setCarregando] = useState(true);
+  const userId = user?.uid;
+  const identidadeSessaoRef = useRef<IdentidadeSessaoClientes>({
+    userId,
+    geracao: 0,
+  });
+  const [geracaoSessao, setGeracaoSessao] = useState(0);
+
+  const [estadoLista, setEstadoLista] = useState<EstadoListaClientes | null>(null);
+  const [cachePesquisa, setCachePesquisa] = useState<CachePesquisaClientes | null>(null);
+  const [carregandoInicialPara, setCarregandoInicialPara] = useState<string | null>(null);
+  const [carregandoMais, setCarregandoMais] = useState(false);
+  const [carregandoPesquisa, setCarregandoPesquisa] = useState(false);
+  const [erroInicial, setErroInicial] = useState('');
+  const [erroMais, setErroMais] = useState('');
+  const [erroPesquisa, setErroPesquisa] = useState('');
   const [termoPesquisa, setTermoPesquisa] = useState('');
+  const pesquisaEmAndamentoRef = useRef<PesquisaClientesEmAndamento | null>(null);
+  const registroMutacoesRef = useRef<RegistroMutacoesClientes | null>(null);
   
   // Estados para o Modal de Criação (Legados)
   const [modalAberto, setModalAberto] = useState(false);
@@ -39,42 +223,293 @@ function ClientesContent() {
   const [editViagem, setEditViagem] = useState('');
 
   useEffect(() => {
-    if (!user) {
+    const identidadeSessao: IdentidadeSessaoClientes = {
+      userId,
+      geracao: identidadeSessaoRef.current.geracao + 1,
+    };
+    identidadeSessaoRef.current = identidadeSessao;
+    setGeracaoSessao(identidadeSessao.geracao);
+
+    if (!userId) {
+      queueMicrotask(() => {
+        if (identidadeSessaoCorresponde(identidadeSessaoRef.current, identidadeSessao)) {
+          setEstadoLista(null);
+          setCachePesquisa(null);
+          setTermoPesquisa('');
+          setErroInicial('');
+          setErroMais('');
+          setErroPesquisa('');
+        }
+      });
+      pesquisaEmAndamentoRef.current = null;
+      registroMutacoesRef.current = null;
       return;
     }
 
+    const userIdDaBusca = userId;
+    registroMutacoesRef.current = {
+      userId: userIdDaBusca,
+      geracao: identidadeSessao.geracao,
+      versao: 0,
+      mutacoes: [],
+    };
+    const versaoMutacoesNoInicio = registroMutacoesRef.current.versao;
+    let buscaAtiva = true;
     const buscarClientes = async () => {
+      setEstadoLista(null);
+      setTermoPesquisa('');
+      setCarregandoInicialPara(userIdDaBusca);
+      setCarregandoMais(false);
+      setCarregandoPesquisa(false);
+      setErroInicial('');
+      setErroMais('');
+      setErroPesquisa('');
+      setCachePesquisa(null);
+      pesquisaEmAndamentoRef.current = null;
+
       try {
-        const dados = await listarClientesDoUsuario(user.uid);
-        setClientes(dados);
+        const pagina = await listarPaginaClientesDoUsuario(userIdDaBusca);
+        if (
+          buscaAtiva
+          && identidadeSessaoCorresponde(identidadeSessaoRef.current, identidadeSessao)
+        ) {
+          const clientesReconciliados = reconciliarClientesComMutacoes(
+            pagina.clientes,
+            registroMutacoesRef.current,
+            userIdDaBusca,
+            identidadeSessao.geracao,
+            versaoMutacoesNoInicio
+          );
+          setEstadoLista({
+            userId: userIdDaBusca,
+            geracao: identidadeSessao.geracao,
+            clientes: clientesReconciliados,
+            ultimoDocumento: pagina.ultimoDocumento,
+            temMais: pagina.temMais,
+          });
+        }
       } catch (error) {
         console.error("Erro ao buscar clientes:", error);
+        if (
+          buscaAtiva
+          && identidadeSessaoCorresponde(identidadeSessaoRef.current, identidadeSessao)
+        ) {
+          setEstadoLista({
+            userId: userIdDaBusca,
+            geracao: identidadeSessao.geracao,
+            clientes: [],
+            ultimoDocumento: null,
+            temMais: false,
+          });
+          setErroInicial('Não foi possível carregar os clientes. Tente novamente.');
+        }
       } finally {
-        setCarregando(false);
+        if (
+          buscaAtiva
+          && identidadeSessaoCorresponde(identidadeSessaoRef.current, identidadeSessao)
+        ) {
+          setCarregandoInicialPara(null);
+        }
       }
     };
 
     buscarClientes();
-  }, [user]);
+
+    return () => {
+      buscaAtiva = false;
+    };
+  }, [user, userId]);
+
+  const listaAtual = estadoPertenceAoUsuario(estadoLista?.userId, userId)
+    && estadoLista?.geracao === geracaoSessao
+    ? estadoLista
+    : null;
+  const clientesPaginados = listaAtual?.clientes ?? [];
+  const cachePesquisaAtual = estadoPertenceAoUsuario(cachePesquisa?.userId, userId)
+    && cachePesquisa?.geracao === geracaoSessao
+    ? cachePesquisa
+    : null;
+  const termoPesquisaNormalizado = normalizeSearchText(termoPesquisa);
+  const pesquisaAtiva = Boolean(termoPesquisaNormalizado);
+  const carregandoInicial = Boolean(userId && carregandoInicialPara === userId);
+
+  useEffect(() => {
+    if (!userId || !termoPesquisaNormalizado || cachePesquisaAtual) {
+      return;
+    }
+
+    const userIdDaPesquisa = userId;
+    const identidadePesquisa = identidadeSessaoRef.current;
+    let pesquisaAtivaNesteEfeito = true;
+    const timer = setTimeout(async () => {
+      setCarregandoPesquisa(true);
+      setErroPesquisa('');
+
+      try {
+        const pesquisaEmAndamento = obterPesquisaClientesEmAndamento(
+          pesquisaEmAndamentoRef.current,
+          userIdDaPesquisa,
+          identidadePesquisa.geracao,
+          registroMutacoesRef.current?.userId === userIdDaPesquisa
+            && registroMutacoesRef.current.geracao === identidadePesquisa.geracao
+            ? registroMutacoesRef.current.versao
+            : 0,
+          listarClientesDoUsuario
+        );
+        pesquisaEmAndamentoRef.current = pesquisaEmAndamento;
+
+        const clientes = await pesquisaEmAndamento.promise;
+        if (
+          pesquisaAtivaNesteEfeito
+          && identidadeSessaoCorresponde(identidadeSessaoRef.current, identidadePesquisa)
+        ) {
+          setCachePesquisa({
+            userId: userIdDaPesquisa,
+            geracao: identidadePesquisa.geracao,
+            clientes: reconciliarClientesComMutacoes(
+              clientes,
+              registroMutacoesRef.current,
+              userIdDaPesquisa,
+              identidadePesquisa.geracao,
+              pesquisaEmAndamento.versaoMutacoes
+            ),
+          });
+        }
+      } catch (error) {
+        console.error('Erro ao carregar a pesquisa completa de clientes:', error);
+        if (
+          pesquisaEmAndamentoRef.current?.userId === userIdDaPesquisa
+          && pesquisaEmAndamentoRef.current.geracao === identidadePesquisa.geracao
+        ) {
+          pesquisaEmAndamentoRef.current = null;
+        }
+        if (
+          pesquisaAtivaNesteEfeito
+          && identidadeSessaoCorresponde(identidadeSessaoRef.current, identidadePesquisa)
+        ) {
+          setErroPesquisa('Não foi possível pesquisar em toda a carteira. Tente novamente.');
+        }
+      } finally {
+        if (
+          pesquisaAtivaNesteEfeito
+          && identidadeSessaoCorresponde(identidadeSessaoRef.current, identidadePesquisa)
+        ) {
+          setCarregandoPesquisa(false);
+        }
+      }
+    }, DEBOUNCE_PESQUISA_CLIENTES_MS);
+
+    return () => {
+      pesquisaAtivaNesteEfeito = false;
+      clearTimeout(timer);
+    };
+  }, [cachePesquisaAtual, geracaoSessao, termoPesquisaNormalizado, userId]);
+
+  const carregarMaisClientes = async () => {
+    if (
+      !userId ||
+      !listaAtual?.temMais ||
+      !listaAtual.ultimoDocumento ||
+      carregandoMais
+    ) {
+      return;
+    }
+
+    const userIdDaBusca = userId;
+    const identidadeBusca = identidadeSessaoRef.current;
+    const cursorDaBusca = listaAtual.ultimoDocumento;
+    const versaoMutacoesNoInicio = registroMutacoesRef.current?.userId === userIdDaBusca
+      && registroMutacoesRef.current.geracao === identidadeBusca.geracao
+      ? registroMutacoesRef.current.versao
+      : 0;
+    setCarregandoMais(true);
+    setErroMais('');
+
+    try {
+      const pagina = await listarPaginaClientesDoUsuario(userIdDaBusca, cursorDaBusca);
+      if (!identidadeSessaoCorresponde(identidadeSessaoRef.current, identidadeBusca)) return;
+      const clientesReconciliados = reconciliarClientesComMutacoes(
+        pagina.clientes,
+        registroMutacoesRef.current,
+        userIdDaBusca,
+        identidadeBusca.geracao,
+        versaoMutacoesNoInicio
+      );
+
+      setEstadoLista((estadoAtual) => {
+        if (
+          !estadoPertenceAoUsuario(estadoAtual?.userId, userIdDaBusca)
+          || estadoAtual?.geracao !== identidadeBusca.geracao
+          || !estadoAtual
+        ) {
+          return estadoAtual;
+        }
+
+        return {
+          ...estadoAtual,
+          clientes: concatenarClientesPorId(estadoAtual.clientes, clientesReconciliados),
+          ultimoDocumento: pagina.ultimoDocumento ?? estadoAtual.ultimoDocumento,
+          temMais: pagina.clientes.length === 0 ? false : pagina.temMais,
+        };
+      });
+    } catch (error) {
+      console.error('Erro ao carregar mais clientes:', error);
+      if (identidadeSessaoCorresponde(identidadeSessaoRef.current, identidadeBusca)) {
+        setErroMais('Não foi possível carregar mais clientes. Tente novamente.');
+      }
+    } finally {
+      if (identidadeSessaoCorresponde(identidadeSessaoRef.current, identidadeBusca)) {
+        setCarregandoMais(false);
+      }
+    }
+  };
 
   const adicionarClienteLegado = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!novoNome) return alert("O nome é obrigatório!");
-    if (!user) return alert("Você precisa estar logado para salvar um cliente.");
+    if (!userId) return alert("Você precisa estar logado para salvar um cliente.");
 
+    const identidadeMutacao = identidadeSessaoRef.current;
     try {
       const novoCliente: NovoCliente = {
         nome: novoNome,
         telefone: novoTelefone || 'Não informado',
         origemLead: "Legado (WhatsApp)",
         primeiraViagem: novaViagem || 'Não informada',
-        ownerId: user.uid,
+        ownerId: userId,
         agencyId: accessProfile.agencyId ?? DEFAULT_AGENCY_ID,
         dataCadastro: new Date()
       };
 
       const docRef = await criarCliente(novoCliente);
-      setClientes([{ id: docRef.id, ...novoCliente }, ...clientes]);
+      const clienteCriado = { id: docRef.id, ...novoCliente };
+      if (!identidadeSessaoCorresponde(identidadeSessaoRef.current, identidadeMutacao)) return;
+      registroMutacoesRef.current = registrarMutacaoCliente(
+        registroMutacoesRef.current,
+        userId,
+        identidadeMutacao.geracao,
+        { tipo: 'criar', cliente: clienteCriado }
+      );
+      setEstadoLista((estadoAtual) => (
+        estadoPertenceAoUsuario(estadoAtual?.userId, userId)
+          && estadoAtual?.geracao === identidadeMutacao.geracao
+          && estadoAtual
+          ? {
+              ...estadoAtual,
+              clientes: inserirClienteNoInicio(estadoAtual.clientes, clienteCriado),
+            }
+          : estadoAtual
+      ));
+      setCachePesquisa((cacheAtual) => (
+        estadoPertenceAoUsuario(cacheAtual?.userId, userId)
+          && cacheAtual?.geracao === identidadeMutacao.geracao
+          && cacheAtual
+          ? {
+              ...cacheAtual,
+              clientes: inserirClienteNoInicio(cacheAtual.clientes, clienteCriado),
+            }
+          : cacheAtual
+      ));
       
       setNovoNome('');
       setNovoTelefone('');
@@ -97,6 +532,7 @@ function ClientesContent() {
     e.preventDefault();
     if (!clienteEmEdicao) return;
 
+    const identidadeMutacao = identidadeSessaoRef.current;
     try {
       const dadosAtualizados = {
         nome: editNome,
@@ -105,9 +541,44 @@ function ClientesContent() {
       };
 
       await atualizarCliente(clienteEmEdicao.id, dadosAtualizados);
+      if (
+        !userId
+        || !identidadeSessaoCorresponde(identidadeSessaoRef.current, identidadeMutacao)
+      ) return;
+      registroMutacoesRef.current = registrarMutacaoCliente(
+        registroMutacoesRef.current,
+        userId,
+        identidadeMutacao.geracao,
+        { tipo: 'editar', id: clienteEmEdicao.id, dados: dadosAtualizados }
+      );
 
-      setClientes(prev => prev.map(c => 
-        c.id === clienteEmEdicao.id ? { ...c, ...dadosAtualizados } : c
+      setEstadoLista((estadoAtual) => (
+        estadoPertenceAoUsuario(estadoAtual?.userId, userId)
+          && estadoAtual?.geracao === identidadeMutacao.geracao
+          && estadoAtual
+          ? {
+              ...estadoAtual,
+              clientes: atualizarClientePorId(
+                estadoAtual.clientes,
+                clienteEmEdicao.id,
+                dadosAtualizados
+              ),
+            }
+          : estadoAtual
+      ));
+      setCachePesquisa((cacheAtual) => (
+        estadoPertenceAoUsuario(cacheAtual?.userId, userId)
+          && cacheAtual?.geracao === identidadeMutacao.geracao
+          && cacheAtual
+          ? {
+              ...cacheAtual,
+              clientes: atualizarClientePorId(
+                cacheAtual.clientes,
+                clienteEmEdicao.id,
+                dadosAtualizados
+              ),
+            }
+          : cacheAtual
       ));
 
       setModalEditAberto(false);
@@ -120,9 +591,39 @@ function ClientesContent() {
 
   const excluirCliente = async (id: string, nomeCliente: string) => {
     if (window.confirm(`Tem a certeza que deseja remover ${nomeCliente}?`)) {
+      const identidadeMutacao = identidadeSessaoRef.current;
       try {
         await excluirClienteFirestore(id);
-        setClientes(prev => prev.filter(item => item.id !== id));
+        if (
+          !userId
+          || !identidadeSessaoCorresponde(identidadeSessaoRef.current, identidadeMutacao)
+        ) return;
+        registroMutacoesRef.current = registrarMutacaoCliente(
+          registroMutacoesRef.current,
+          userId,
+          identidadeMutacao.geracao,
+          { tipo: 'excluir', id }
+        );
+        setEstadoLista((estadoAtual) => (
+          estadoPertenceAoUsuario(estadoAtual?.userId, userId)
+            && estadoAtual?.geracao === identidadeMutacao.geracao
+            && estadoAtual
+            ? {
+                ...estadoAtual,
+                clientes: removerClientePorId(estadoAtual.clientes, id),
+              }
+            : estadoAtual
+        ));
+        setCachePesquisa((cacheAtual) => (
+          estadoPertenceAoUsuario(cacheAtual?.userId, userId)
+            && cacheAtual?.geracao === identidadeMutacao.geracao
+            && cacheAtual
+            ? {
+                ...cacheAtual,
+                clientes: removerClientePorId(cacheAtual.clientes, id),
+              }
+            : cacheAtual
+        ));
       } catch (error) {
         console.error("Erro ao excluir cliente:", error);
       }
@@ -149,9 +650,15 @@ function ClientesContent() {
     return origemLead;
   };
 
-  const termoPesquisaNormalizado = normalizeSearchText(termoPesquisa);
+  const fontePesquisa = selecionarFonteClientes(
+    clientesPaginados,
+    cachePesquisaAtual,
+    userId,
+    geracaoSessao,
+    pesquisaAtiva
+  );
   const clientesPesquisados = useMemo(() => (
-    filterBySearch(clientes, termoPesquisa, (cliente) => [
+    filterBySearch(fontePesquisa, termoPesquisa, (cliente) => [
       cliente.nome,
       cliente.telefone,
       cliente.telefoneNormalizado,
@@ -159,7 +666,8 @@ function ClientesContent() {
       cliente.primeiraViagem,
       cliente.dataCadastro ? formatarData(cliente.dataCadastro) : undefined,
     ])
-  ), [clientes, termoPesquisa]);
+  ), [fontePesquisa, termoPesquisa]);
+  const clientesExibidos = pesquisaAtiva ? clientesPesquisados : clientesPaginados;
 
   return (
     <main className="min-h-screen bg-slate-50 p-4 sm:p-6 md:p-8">
@@ -177,11 +685,15 @@ function ClientesContent() {
         </div>
 
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 mb-8 inline-block">
-          <h3 className="text-slate-500 text-sm font-semibold uppercase">Total de clientes</h3>
-          <p className="text-4xl font-black text-green-600 mt-1">{clientes.length}</p>
+          <h3 className="text-slate-500 text-sm font-semibold uppercase">
+            {pesquisaAtiva ? 'Resultados encontrados' : 'Clientes carregados'}
+          </h3>
+          <p className="text-4xl font-black text-green-600 mt-1">
+            {pesquisaAtiva ? clientesPesquisados.length : clientesPaginados.length}
+          </p>
         </div>
 
-        {!carregando && clientes.length > 0 && (
+        {!carregandoInicial && clientesPaginados.length > 0 && (
           <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <SearchInput
               value={termoPesquisa}
@@ -190,18 +702,28 @@ function ClientesContent() {
               ariaLabel="Pesquisar clientes"
             />
             <p className="mt-3 text-xs font-semibold text-slate-500">
-              {termoPesquisaNormalizado
-                ? `${clientesPesquisados.length} ${clientesPesquisados.length === 1 ? 'resultado encontrado' : 'resultados encontrados'} em ${clientes.length} ${clientes.length === 1 ? 'cliente' : 'clientes'}`
-                : `${clientes.length} ${clientes.length === 1 ? 'cliente carregado' : 'clientes carregados'}`}
+              {pesquisaAtiva
+                ? carregandoPesquisa
+                  ? 'Pesquisando em toda a carteira...'
+                  : `${clientesPesquisados.length} ${clientesPesquisados.length === 1 ? 'resultado encontrado' : 'resultados encontrados'}`
+                : `${clientesPaginados.length} ${clientesPaginados.length === 1 ? 'cliente carregado' : 'clientes carregados'}`}
             </p>
+            {erroPesquisa && (
+              <p className="mt-2 text-xs font-semibold text-red-600">{erroPesquisa}</p>
+            )}
           </div>
         )}
 
-        {carregando ? (
+        {erroInicial ? (
+          <EmptyState
+            title="Não foi possível carregar os clientes"
+            description={erroInicial}
+          />
+        ) : carregandoInicial ? (
           <div className="flex justify-center items-center py-20">
             <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-green-600"></div>
           </div>
-        ) : clientes.length === 0 ? (
+        ) : clientesPaginados.length === 0 ? (
           <EmptyState
             title="Nenhum cliente real na carteira"
             description="Clientes representam compradores reais. Depois que uma cotação for marcada como fechada no histórico, ela poderá ser adicionada manualmente à carteira."
@@ -210,7 +732,11 @@ function ClientesContent() {
               { href: '/leads', label: 'Ver oportunidades', variant: 'secondary' },
             ]}
           />
-        ) : clientesPesquisados.length === 0 ? (
+        ) : pesquisaAtiva && carregandoPesquisa && !cachePesquisaAtual ? (
+          <div className="flex justify-center items-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-green-600"></div>
+          </div>
+        ) : clientesExibidos.length === 0 ? (
           <EmptyState
             title={`Nenhum resultado encontrado para "${termoPesquisa.trim()}".`}
             description="Tente pesquisar por nome, telefone, origem, primeira viagem ou data de cadastro."
@@ -218,7 +744,7 @@ function ClientesContent() {
         ) : (
           <>
           <div className="space-y-4 md:hidden">
-            {clientesPesquisados.map((cliente) => (
+            {clientesExibidos.map((cliente) => (
               <article key={cliente.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -279,7 +805,7 @@ function ClientesContent() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {clientesPesquisados.map((cliente) => (
+                {clientesExibidos.map((cliente) => (
                   <tr key={cliente.id} className="hover:bg-slate-50 transition duration-150">
                     <td className="px-4 py-4 font-bold text-slate-800 text-lg md:px-6">{cliente.nome}</td>
                     <td className="px-4 py-4 text-slate-600 md:px-6">{cliente.telefone}</td>
@@ -302,6 +828,21 @@ function ClientesContent() {
             </table>
             </div>
           </div>
+          {!pesquisaAtiva && listaAtual?.temMais && (
+            <div className="mt-6 flex flex-col items-center gap-2">
+              {erroMais && (
+                <p className="text-sm font-semibold text-red-600">{erroMais}</p>
+              )}
+              <button
+                type="button"
+                onClick={carregarMaisClientes}
+                disabled={carregandoMais}
+                className="rounded-lg border border-green-200 bg-white px-5 py-2 text-sm font-black text-green-700 transition hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {carregandoMais ? 'Carregando...' : 'Carregar mais'}
+              </button>
+            </div>
+          )}
           </>
         )}
       </div>
