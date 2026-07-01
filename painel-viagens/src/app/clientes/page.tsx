@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { Timestamp, type DocumentData, type QueryDocumentSnapshot } from 'firebase/firestore';
 import AuthGuard from '../../components/AuthGuard';
 import EmptyState from '../../components/EmptyState';
@@ -15,6 +15,7 @@ import {
 } from '../../services/clientesService';
 import { DEFAULT_AGENCY_ID } from '../../types';
 import type { Cliente, NovoCliente } from '../../types';
+import { normalizarTelefoneCliente } from '../../utils/clienteConversionUtils';
 import { filterBySearch, normalizeSearchText } from '../../utils/searchUtils';
 
 const DEBOUNCE_PESQUISA_CLIENTES_MS = 400;
@@ -55,6 +56,47 @@ export interface RegistroMutacoesClientes {
 export interface IdentidadeSessaoClientes {
   userId: string | undefined;
   geracao: number;
+  agencyId?: string;
+  role?: string;
+}
+
+export type OperacaoCliente = 'criar' | 'editar' | 'excluir';
+
+export interface IdentidadeOperacaoCliente extends IdentidadeSessaoClientes {
+  operacao: OperacaoCliente;
+  clienteId?: string;
+}
+
+export interface FormularioCriacaoClienteComSessao {
+  identidade: IdentidadeOperacaoCliente;
+}
+
+export interface SelecaoClienteComSessao {
+  cliente: Cliente;
+  identidade: IdentidadeOperacaoCliente;
+}
+
+export function criarFormularioCriacaoCliente(
+  sessao: IdentidadeSessaoClientes
+): FormularioCriacaoClienteComSessao {
+  return {
+    identidade: { ...sessao, operacao: 'criar' },
+  };
+}
+
+export function criarSelecaoCliente(
+  cliente: Cliente,
+  sessao: IdentidadeSessaoClientes,
+  operacao: 'editar' | 'excluir'
+): SelecaoClienteComSessao {
+  return {
+    cliente,
+    identidade: {
+      ...sessao,
+      operacao,
+      clienteId: cliente.id,
+    },
+  };
 }
 
 export function concatenarClientesPorId(atuais: Cliente[], novos: Cliente[]) {
@@ -93,6 +135,41 @@ export function identidadeSessaoCorresponde(
   capturada: IdentidadeSessaoClientes
 ) {
   return atual.userId === capturada.userId && atual.geracao === capturada.geracao;
+}
+
+export function operacaoClientePertenceASessao(
+  atual: IdentidadeSessaoClientes,
+  capturada: IdentidadeOperacaoCliente,
+  userIdAtual: string | undefined,
+  clientesAtuais: Cliente[],
+  clienteSelecionadoId?: string
+) {
+  if (
+    !userIdAtual
+    || atual.userId !== userIdAtual
+    || !identidadeSessaoCorresponde(atual, capturada)
+    || atual.agencyId !== capturada.agencyId
+    || atual.role !== capturada.role
+  ) {
+    return false;
+  }
+
+  if (capturada.operacao === 'criar') {
+    return !capturada.clienteId;
+  }
+
+  return Boolean(
+    capturada.clienteId
+    && clienteSelecionadoId === capturada.clienteId
+    && clientesAtuais.some((cliente) => cliente.id === capturada.clienteId)
+  );
+}
+
+export function montarTelefoneCliente(telefone: string) {
+  return {
+    telefone,
+    telefoneNormalizado: normalizarTelefoneCliente(telefone),
+  };
 }
 
 export function selecionarFonteClientes(
@@ -194,6 +271,8 @@ function ClientesContent() {
   const identidadeSessaoRef = useRef<IdentidadeSessaoClientes>({
     userId,
     geracao: 0,
+    agencyId: accessProfile.agencyId,
+    role: accessProfile.role,
   });
   const [geracaoSessao, setGeracaoSessao] = useState(0);
 
@@ -210,42 +289,71 @@ function ClientesContent() {
   const registroMutacoesRef = useRef<RegistroMutacoesClientes | null>(null);
   
   // Estados para o Modal de Criação (Legados)
-  const [modalAberto, setModalAberto] = useState(false);
+  const [formularioCriacao, setFormularioCriacao] =
+    useState<FormularioCriacaoClienteComSessao | null>(null);
+  const formularioCriacaoRef = useRef<FormularioCriacaoClienteComSessao | null>(null);
   const [novoNome, setNovoNome] = useState('');
   const [novoTelefone, setNovoTelefone] = useState('');
   const [novaViagem, setNovaViagem] = useState('');
 
   // Estados para o Modal de Edição
-  const [modalEditAberto, setModalEditAberto] = useState(false);
-  const [clienteEmEdicao, setClienteEmEdicao] = useState<Cliente | null>(null);
+  const [selecaoEdicao, setSelecaoEdicao] = useState<SelecaoClienteComSessao | null>(null);
+  const selecaoEdicaoRef = useRef<SelecaoClienteComSessao | null>(null);
+  const selecaoExclusaoRef = useRef<SelecaoClienteComSessao | null>(null);
   const [editNome, setEditNome] = useState('');
   const [editTelefone, setEditTelefone] = useState('');
   const [editViagem, setEditViagem] = useState('');
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const identidadeSessao: IdentidadeSessaoClientes = {
       userId,
       geracao: identidadeSessaoRef.current.geracao + 1,
+      agencyId: accessProfile.agencyId,
+      role: accessProfile.role,
     };
     identidadeSessaoRef.current = identidadeSessao;
     setGeracaoSessao(identidadeSessao.geracao);
 
-    if (!userId) {
-      queueMicrotask(() => {
-        if (identidadeSessaoCorresponde(identidadeSessaoRef.current, identidadeSessao)) {
-          setEstadoLista(null);
-          setCachePesquisa(null);
-          setTermoPesquisa('');
-          setErroInicial('');
-          setErroMais('');
-          setErroPesquisa('');
-        }
-      });
+    formularioCriacaoRef.current = null;
+    setFormularioCriacao(null);
+    selecaoEdicaoRef.current = null;
+    setSelecaoEdicao(null);
+    selecaoExclusaoRef.current = null;
+    setNovoNome('');
+    setNovoTelefone('');
+    setNovaViagem('');
+    setEditNome('');
+    setEditTelefone('');
+    setEditViagem('');
+    setEstadoLista(null);
+    setCachePesquisa(null);
+    setTermoPesquisa('');
+    setCarregandoInicialPara(null);
+    setCarregandoMais(false);
+    setCarregandoPesquisa(false);
+    setErroInicial('');
+    setErroMais('');
+    setErroPesquisa('');
+    pesquisaEmAndamentoRef.current = null;
+    registroMutacoesRef.current = null;
+    return () => {
+      identidadeSessaoRef.current = {
+        userId: undefined,
+        geracao: identidadeSessao.geracao + 1,
+      };
       pesquisaEmAndamentoRef.current = null;
       registroMutacoesRef.current = null;
+      formularioCriacaoRef.current = null;
+      selecaoEdicaoRef.current = null;
+      selecaoExclusaoRef.current = null;
+    };
+  }, [accessProfile.agencyId, accessProfile.role, userId]);
+
+  useEffect(() => {
+    const identidadeSessao = identidadeSessaoRef.current;
+    if (!userId || identidadeSessao.userId !== userId || geracaoSessao !== identidadeSessao.geracao) {
       return;
     }
-
     const userIdDaBusca = userId;
     registroMutacoesRef.current = {
       userId: userIdDaBusca,
@@ -318,7 +426,7 @@ function ClientesContent() {
     return () => {
       buscaAtiva = false;
     };
-  }, [user, userId]);
+  }, [geracaoSessao, userId]);
 
   const listaAtual = estadoPertenceAoUsuario(estadoLista?.userId, userId)
     && estadoLista?.geracao === geracaoSessao
@@ -469,11 +577,23 @@ function ClientesContent() {
     if (!novoNome) return alert("O nome é obrigatório!");
     if (!userId) return alert("Você precisa estar logado para salvar um cliente.");
 
-    const identidadeMutacao = identidadeSessaoRef.current;
+    const formularioOrigem = formularioCriacao;
+    if (!formularioOrigem || formularioCriacaoRef.current !== formularioOrigem) return;
+    const identidadeMutacao = formularioOrigem.identidade;
+    if (!operacaoClientePertenceASessao(
+      identidadeSessaoRef.current,
+      identidadeMutacao,
+      userId,
+      clientesExibidos
+    )) {
+      formularioCriacaoRef.current = null;
+      setFormularioCriacao(null);
+      return;
+    }
     try {
       const novoCliente: NovoCliente = {
         nome: novoNome,
-        telefone: novoTelefone || 'Não informado',
+        ...montarTelefoneCliente(novoTelefone),
         origemLead: "Legado (WhatsApp)",
         primeiraViagem: novaViagem || 'Não informada',
         ownerId: userId,
@@ -483,10 +603,18 @@ function ClientesContent() {
 
       const docRef = await criarCliente(novoCliente);
       const clienteCriado = { id: docRef.id, ...novoCliente };
-      if (!identidadeSessaoCorresponde(identidadeSessaoRef.current, identidadeMutacao)) return;
+      if (
+        formularioCriacaoRef.current !== formularioOrigem
+        || !operacaoClientePertenceASessao(
+        identidadeSessaoRef.current,
+        identidadeMutacao,
+        identidadeMutacao.userId!,
+        clientesExibidos
+        )
+      ) return;
       registroMutacoesRef.current = registrarMutacaoCliente(
         registroMutacoesRef.current,
-        userId,
+        identidadeMutacao.userId!,
         identidadeMutacao.geracao,
         { tipo: 'criar', cliente: clienteCriado }
       );
@@ -514,42 +642,90 @@ function ClientesContent() {
       setNovoNome('');
       setNovoTelefone('');
       setNovaViagem('');
-      setModalAberto(false);
+      formularioCriacaoRef.current = null;
+      setFormularioCriacao(null);
     } catch (error) {
-      console.error("Erro ao adicionar cliente:", error);
+      if (
+        formularioCriacaoRef.current === formularioOrigem
+        && operacaoClientePertenceASessao(
+        identidadeSessaoRef.current,
+        identidadeMutacao,
+        userId,
+        clientesExibidos
+        )
+      ) {
+        console.error("Erro ao adicionar cliente:", error);
+      }
     }
   };
 
+  const abrirModalCriacao = () => {
+    const formulario = criarFormularioCriacaoCliente(identidadeSessaoRef.current);
+    formularioCriacaoRef.current = formulario;
+    setFormularioCriacao(formulario);
+  };
+
+  const fecharModalCriacao = () => {
+    formularioCriacaoRef.current = null;
+    setFormularioCriacao(null);
+  };
+
   const abrirModalEdicao = (cliente: Cliente) => {
-    setClienteEmEdicao(cliente);
+    if (!clientesExibidos.some((item) => item.id === cliente.id)) return;
+    const selecao = criarSelecaoCliente(cliente, identidadeSessaoRef.current, 'editar');
+    selecaoEdicaoRef.current = selecao;
+    setSelecaoEdicao(selecao);
     setEditNome(cliente.nome);
     setEditTelefone(cliente.telefone || '');
     setEditViagem(cliente.primeiraViagem);
-    setModalEditAberto(true);
+  };
+
+  const fecharModalEdicao = () => {
+    selecaoEdicaoRef.current = null;
+    setSelecaoEdicao(null);
   };
 
   const salvarEdicaoCliente = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!clienteEmEdicao) return;
+    const selecaoOrigem = selecaoEdicao;
+    if (!selecaoOrigem || selecaoEdicaoRef.current !== selecaoOrigem) return;
 
-    const identidadeMutacao = identidadeSessaoRef.current;
+    const clienteId = selecaoOrigem.cliente.id;
+    const identidadeMutacao = selecaoOrigem.identidade;
+    if (!operacaoClientePertenceASessao(
+      identidadeSessaoRef.current,
+      identidadeMutacao,
+      userId,
+      clientesExibidos,
+      clienteId
+    )) {
+      selecaoEdicaoRef.current = null;
+      setSelecaoEdicao(null);
+      return;
+    }
     try {
       const dadosAtualizados = {
         nome: editNome,
-        telefone: editTelefone || 'Não informado',
+        ...montarTelefoneCliente(editTelefone),
         primeiraViagem: editViagem
       };
 
-      await atualizarCliente(clienteEmEdicao.id, dadosAtualizados);
+      await atualizarCliente(clienteId, dadosAtualizados);
       if (
-        !userId
-        || !identidadeSessaoCorresponde(identidadeSessaoRef.current, identidadeMutacao)
+        selecaoEdicaoRef.current !== selecaoOrigem
+        || !operacaoClientePertenceASessao(
+          identidadeSessaoRef.current,
+          identidadeMutacao,
+          identidadeMutacao.userId!,
+          clientesExibidos,
+          clienteId
+        )
       ) return;
       registroMutacoesRef.current = registrarMutacaoCliente(
         registroMutacoesRef.current,
-        userId,
+        identidadeMutacao.userId!,
         identidadeMutacao.geracao,
-        { tipo: 'editar', id: clienteEmEdicao.id, dados: dadosAtualizados }
+        { tipo: 'editar', id: clienteId, dados: dadosAtualizados }
       );
 
       setEstadoLista((estadoAtual) => (
@@ -560,7 +736,7 @@ function ClientesContent() {
               ...estadoAtual,
               clientes: atualizarClientePorId(
                 estadoAtual.clientes,
-                clienteEmEdicao.id,
+                clienteId,
                 dadosAtualizados
               ),
             }
@@ -574,33 +750,68 @@ function ClientesContent() {
               ...cacheAtual,
               clientes: atualizarClientePorId(
                 cacheAtual.clientes,
-                clienteEmEdicao.id,
+                clienteId,
                 dadosAtualizados
               ),
             }
           : cacheAtual
       ));
 
-      setModalEditAberto(false);
-      setClienteEmEdicao(null);
+      selecaoEdicaoRef.current = null;
+      setSelecaoEdicao(null);
     } catch (error) {
-      console.error("Erro ao atualizar cliente:", error);
-      alert("Erro ao salvar alterações.");
+      if (
+        selecaoEdicaoRef.current === selecaoOrigem
+        && operacaoClientePertenceASessao(
+        identidadeSessaoRef.current,
+        identidadeMutacao,
+        userId,
+        clientesExibidos,
+        clienteId
+        )
+      ) {
+        console.error("Erro ao atualizar cliente:", error);
+        alert("Erro ao salvar alterações.");
+      }
     }
   };
 
-  const excluirCliente = async (id: string, nomeCliente: string) => {
-    if (window.confirm(`Tem a certeza que deseja remover ${nomeCliente}?`)) {
-      const identidadeMutacao = identidadeSessaoRef.current;
+  const excluirCliente = async (cliente: Cliente) => {
+    const selecaoOrigem = criarSelecaoCliente(
+      cliente,
+      identidadeSessaoRef.current,
+      'excluir'
+    );
+    selecaoExclusaoRef.current = selecaoOrigem;
+    if (window.confirm(`Tem a certeza que deseja remover ${cliente.nome}?`)) {
+      const id = selecaoOrigem.cliente.id;
+      const identidadeMutacao = selecaoOrigem.identidade;
+      if (selecaoExclusaoRef.current !== selecaoOrigem) return;
+      if (!operacaoClientePertenceASessao(
+        identidadeSessaoRef.current,
+        identidadeMutacao,
+        userId,
+        clientesExibidos,
+        id
+      )) {
+        selecaoExclusaoRef.current = null;
+        return;
+      }
       try {
         await excluirClienteFirestore(id);
         if (
-          !userId
-          || !identidadeSessaoCorresponde(identidadeSessaoRef.current, identidadeMutacao)
+          selecaoExclusaoRef.current !== selecaoOrigem
+          || !operacaoClientePertenceASessao(
+            identidadeSessaoRef.current,
+            identidadeMutacao,
+            userId,
+            clientesExibidos,
+            id
+          )
         ) return;
         registroMutacoesRef.current = registrarMutacaoCliente(
           registroMutacoesRef.current,
-          userId,
+          identidadeMutacao.userId!,
           identidadeMutacao.geracao,
           { tipo: 'excluir', id }
         );
@@ -624,9 +835,29 @@ function ClientesContent() {
               }
             : cacheAtual
         ));
+        if (selecaoExclusaoRef.current === selecaoOrigem) {
+          selecaoExclusaoRef.current = null;
+        }
       } catch (error) {
-        console.error("Erro ao excluir cliente:", error);
+        if (
+          selecaoExclusaoRef.current === selecaoOrigem
+          && operacaoClientePertenceASessao(
+          identidadeSessaoRef.current,
+          identidadeMutacao,
+          userId,
+          clientesExibidos,
+          id
+          )
+        ) {
+          console.error("Erro ao excluir cliente:", error);
+        }
+      } finally {
+        if (selecaoExclusaoRef.current === selecaoOrigem) {
+          selecaoExclusaoRef.current = null;
+        }
       }
+    } else if (selecaoExclusaoRef.current === selecaoOrigem) {
+      selecaoExclusaoRef.current = null;
     }
   };
 
@@ -678,7 +909,7 @@ function ClientesContent() {
             <p className="text-slate-500 mt-1">Compradores reais para relacionamento e recompra</p>
           </div>
           <div className="flex gap-4">
-            <button onClick={() => setModalAberto(true)} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition font-bold shadow-md">
+            <button onClick={abrirModalCriacao} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition font-bold shadow-md">
               Adicionar cliente legado
             </button>
           </div>
@@ -781,7 +1012,7 @@ function ClientesContent() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => excluirCliente(cliente.id, cliente.nome)}
+                    onClick={() => excluirCliente(cliente)}
                     className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-black uppercase text-red-600 transition hover:bg-red-100"
                   >
                     Remover cliente
@@ -820,7 +1051,7 @@ function ClientesContent() {
                     <td className="px-4 py-4 text-slate-400 text-sm md:px-6">{formatarData(cliente.dataCadastro)}</td>
                     <td className="px-4 py-4 text-center flex items-center justify-center gap-2 md:px-6">
                       <button onClick={() => abrirModalEdicao(cliente)} className="text-blue-500 hover:text-blue-700 p-2" title="Editar cliente">✏️</button>
-                      <button onClick={() => excluirCliente(cliente.id, cliente.nome)} className="text-red-400 hover:text-red-600 p-2" title="Remover cliente">🗑️</button>
+                      <button onClick={() => excluirCliente(cliente)} className="text-red-400 hover:text-red-600 p-2" title="Remover cliente">🗑️</button>
                     </td>
                   </tr>
                 ))}
@@ -848,7 +1079,7 @@ function ClientesContent() {
       </div>
 
       {/* Modal Criar Legado */}
-      {modalAberto && (
+      {formularioCriacao && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md">
             <h2 className="text-2xl font-bold text-slate-800 mb-6">Novo cliente legado</h2>
@@ -866,7 +1097,7 @@ function ClientesContent() {
                 <input type="text" value={novaViagem} onChange={(e) => setNovaViagem(e.target.value)} className="w-full mt-1 px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-green-500" placeholder="Ex: GRU ➔ SSA" />
               </div>
               <div className="flex justify-end gap-3 mt-4">
-                <button type="button" onClick={() => setModalAberto(false)} className="px-4 py-2 text-slate-500 font-semibold hover:bg-slate-100 rounded-lg">Cancelar</button>
+                <button type="button" onClick={fecharModalCriacao} className="px-4 py-2 text-slate-500 font-semibold hover:bg-slate-100 rounded-lg">Cancelar</button>
                 <button type="submit" className="px-6 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 shadow-md">Salvar</button>
               </div>
             </form>
@@ -875,7 +1106,7 @@ function ClientesContent() {
       )}
 
       {/* Modal Editar Cliente */}
-      {modalEditAberto && (
+      {selecaoEdicao && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md">
             <h2 className="text-2xl font-bold text-slate-800 mb-6">Editar cadastro do cliente</h2>
@@ -893,7 +1124,7 @@ function ClientesContent() {
                 <input type="text" value={editViagem} onChange={(e) => setEditViagem(e.target.value)} className="w-full mt-1 px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" required />
               </div>
               <div className="flex justify-end gap-3 mt-4">
-                <button type="button" onClick={() => setModalEditAberto(false)} className="px-4 py-2 text-slate-500 font-semibold hover:bg-slate-100 rounded-lg">Cancelar</button>
+                <button type="button" onClick={fecharModalEdicao} className="px-4 py-2 text-slate-500 font-semibold hover:bg-slate-100 rounded-lg">Cancelar</button>
                 <button type="submit" className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-md">Salvar</button>
               </div>
             </form>

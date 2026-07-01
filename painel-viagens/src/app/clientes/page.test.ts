@@ -28,10 +28,14 @@ vi.mock('../../components/SearchInput', () => ({
 import {
   atualizarClientePorId,
   concatenarClientesPorId,
+  criarFormularioCriacaoCliente,
+  criarSelecaoCliente,
   estadoPertenceAoUsuario,
   identidadeSessaoCorresponde,
   inserirClienteNoInicio,
+  montarTelefoneCliente,
   obterPesquisaClientesEmAndamento,
+  operacaoClientePertenceASessao,
   reconciliarClientesComMutacoes,
   registrarMutacaoCliente,
   removerClientePorId,
@@ -365,5 +369,199 @@ describe('estado paginado de clientes', () => {
     expect(
       reconciliarClientesComMutacoes([maria1], registroA1, 'usuario-a', 3, 0)
     ).toEqual([maria1]);
+  });
+
+  it('bloqueia seleção residual após troca direta de usuário, inclusive admin da agência', () => {
+    const sessaoA = {
+      userId: 'usuario-a',
+      geracao: 1,
+      agencyId: 'agencia-1',
+      role: 'admin',
+    };
+    const selecaoA = criarSelecaoCliente(maria1, sessaoA, 'editar');
+
+    expect(operacaoClientePertenceASessao(
+      { ...sessaoA, userId: 'usuario-b', geracao: 2 },
+      selecaoA.identidade,
+      'usuario-b',
+      [maria1],
+      selecaoA.cliente.id
+    )).toBe(false);
+  });
+
+  it('submit e conclusão antigos não chamam service nem alteram lista, mensagens ou loading de B', async () => {
+    const sessaoA = { userId: 'usuario-a', geracao: 1 };
+    const sessaoB = { userId: 'usuario-b', geracao: 2 };
+    const selecaoA = criarSelecaoCliente(maria1, sessaoA, 'editar');
+    const atualizar = vi.fn();
+    const estadoB = {
+      clientes: [maria2],
+      cache: [maria2],
+      diario: ['mutacao-b'],
+      sucesso: 'sucesso-b',
+      erro: 'erro-b',
+      loading: true,
+    };
+    let estadoAtual = estadoB;
+
+    if (operacaoClientePertenceASessao(
+      sessaoB, selecaoA.identidade, 'usuario-b', [maria2], selecaoA.cliente.id
+    )) {
+      await atualizar('maria-1');
+      estadoAtual = {
+        clientes: [maria1],
+        cache: [maria1],
+        diario: ['mutacao-a'],
+        sucesso: 'sucesso-a',
+        erro: '',
+        loading: false,
+      };
+    }
+
+    expect(atualizar).not.toHaveBeenCalled();
+    expect(estadoAtual).toBe(estadoB);
+  });
+
+  it('bloqueia edição e exclusão quando o ID selecionado não pertence à fonte atual', () => {
+    const sessao = { userId: 'usuario-a', geracao: 4 };
+
+    const selecaoEdicao = criarSelecaoCliente(maria1, sessao, 'editar');
+    const selecaoExclusao = criarSelecaoCliente(maria1, sessao, 'excluir');
+    expect(operacaoClientePertenceASessao(
+      sessao,
+      selecaoEdicao.identidade,
+      'usuario-a',
+      [maria2],
+      'maria-1'
+    )).toBe(false);
+    expect(operacaoClientePertenceASessao(
+      sessao,
+      selecaoExclusao.identidade,
+      'usuario-a',
+      [maria2],
+      'maria-1'
+    )).toBe(false);
+  });
+
+  it('aceita criação na sessão atual sem exigir ID', () => {
+    const sessao = { userId: 'usuario-a', geracao: 4 };
+
+    const formulario = criarFormularioCriacaoCliente(sessao);
+    expect(operacaoClientePertenceASessao(
+      sessao,
+      formulario.identidade,
+      'usuario-a',
+      [],
+    )).toBe(true);
+  });
+
+  it('aceita operação válida somente sobre o ID explicitamente selecionado', () => {
+    const sessao = { userId: 'usuario-a', geracao: 4 };
+
+    const selecao = criarSelecaoCliente(maria2, sessao, 'editar');
+    expect(operacaoClientePertenceASessao(
+      sessao,
+      selecao.identidade,
+      'usuario-a',
+      [maria1, maria2],
+      'maria-2'
+    )).toBe(true);
+    expect(operacaoClientePertenceASessao(
+      sessao,
+      selecao.identidade,
+      'usuario-a',
+      [maria1, maria2],
+      'maria-1'
+    )).toBe(false);
+  });
+
+  it('criação e edição mantêm telefone visual e recalculam o normalizado', () => {
+    expect(montarTelefoneCliente('(82) 99999-9999')).toEqual({
+      telefone: '(82) 99999-9999',
+      telefoneNormalizado: '82999999999',
+    });
+    expect(montarTelefoneCliente('(82) 98888-1111')).toEqual({
+      telefone: '(82) 98888-1111',
+      telefoneNormalizado: '82988881111',
+    });
+  });
+
+  it('telefone vazio limpa conjuntamente os dois campos', () => {
+    expect(montarTelefoneCliente('')).toEqual({
+      telefone: '',
+      telefoneNormalizado: '',
+    });
+  });
+
+  it('captura a identidade na origem de criação, edição e exclusão', () => {
+    const sessao = {
+      userId: 'usuario-a',
+      geracao: 7,
+      agencyId: 'agencia-1',
+      role: 'admin',
+    };
+    const formulario = criarFormularioCriacaoCliente(sessao);
+    const edicao = criarSelecaoCliente(maria1, sessao, 'editar');
+    const exclusao = criarSelecaoCliente(maria2, sessao, 'excluir');
+
+    expect(formulario.identidade).toEqual({ ...sessao, operacao: 'criar' });
+    expect(edicao).toEqual({
+      cliente: maria1,
+      identidade: { ...sessao, operacao: 'editar', clienteId: 'maria-1' },
+    });
+    expect(exclusao).toEqual({
+      cliente: maria2,
+      identidade: { ...sessao, operacao: 'excluir', clienteId: 'maria-2' },
+    });
+  });
+
+  it('rejeita A1 em A2 com mesmo UID, agência, perfil e referência de usuário', () => {
+    const usuarioReutilizado = { uid: 'usuario-a' };
+    const sessaoA1 = {
+      userId: usuarioReutilizado.uid,
+      geracao: 1,
+      agencyId: 'agencia-1',
+      role: 'admin',
+    };
+    const selecaoA1 = criarSelecaoCliente(maria1, sessaoA1, 'editar');
+    const sessaoA2 = { ...sessaoA1, userId: usuarioReutilizado.uid, geracao: 3 };
+
+    expect(operacaoClientePertenceASessao(
+      sessaoA2,
+      selecaoA1.identidade,
+      usuarioReutilizado.uid,
+      [maria1],
+      selecaoA1.cliente.id
+    )).toBe(false);
+  });
+
+  it('não chama services de criação, edição ou exclusão com origens residuais de A1', async () => {
+    const sessaoA1 = {
+      userId: 'usuario-a',
+      geracao: 1,
+      agencyId: 'agencia-1',
+      role: 'admin',
+    };
+    const sessaoA2 = { ...sessaoA1, geracao: 3 };
+    const formularioA1 = criarFormularioCriacaoCliente(sessaoA1);
+    const edicaoA1 = criarSelecaoCliente(maria1, sessaoA1, 'editar');
+    const exclusaoA1 = criarSelecaoCliente(maria1, sessaoA1, 'excluir');
+    const criar = vi.fn();
+    const atualizar = vi.fn();
+    const excluir = vi.fn();
+
+    if (operacaoClientePertenceASessao(
+      sessaoA2, formularioA1.identidade, 'usuario-a', [maria1]
+    )) await criar();
+    if (operacaoClientePertenceASessao(
+      sessaoA2, edicaoA1.identidade, 'usuario-a', [maria1], edicaoA1.cliente.id
+    )) await atualizar();
+    if (operacaoClientePertenceASessao(
+      sessaoA2, exclusaoA1.identidade, 'usuario-a', [maria1], exclusaoA1.cliente.id
+    )) await excluir();
+
+    expect(criar).not.toHaveBeenCalled();
+    expect(atualizar).not.toHaveBeenCalled();
+    expect(excluir).not.toHaveBeenCalled();
   });
 });
