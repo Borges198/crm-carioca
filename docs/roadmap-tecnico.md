@@ -79,23 +79,25 @@ Proxima evolucao:
 
 ## Fase 4: seguranca e producao
 
-Status: proposta documentada, ainda exige decisao operacional.
+Status: acesso por perfil e Rules implementados em fase anterior; tratamento de
+documentos legados continua pendente.
 
 Escopo:
 
-- revisar `docs/firestore-security-proposal.md`;
-- validar regras em ambiente seguro antes de producao;
+- manter `docs/firestore-security-proposal.md` como registro do desenho inicial;
+- consultar `docs/access-control-checkpoint.md` para o estado validado;
 - decidir destino de documentos antigos sem `ownerId`;
 - criar plano de migracao, arquivamento ou aceite de inacessibilidade;
-- criar indices compostos exigidos por consultas com `ownerId` e ordenacao;
+- monitorar indices compostos exigidos por consultas com `ownerId` e ordenacao;
 - validar testes com mais de um usuario autenticado;
 - garantir que credenciais e arquivos sensiveis nao sejam commitados.
 
 Pontos de atencao:
 
-- `ownerId` e a fronteira atual de isolamento;
+- `ownerId` delimita propriedade e visao individual; visoes autorizadas de
+  equipe tambem consideram `agencyId`, perfil, pagina e Rules;
 - `isAdmin` client-side nao deve ser tratado como seguranca real;
-- regras Firestore nao devem ser aplicadas sem plano para documentos antigos.
+- alteracoes futuras de Rules exigem plano para documentos antigos.
 
 ## Fase 5: melhorias futuras
 
@@ -145,15 +147,18 @@ Ja implementado:
 - `fechado` e `perdido` nao aparecem por padrao.
 - acao manual `Adicionar aos clientes` no `/historico` para cotacoes com `leadStatus = "fechado"`;
 - criacao de cliente com confirmacao do usuario;
-- deduplicacao inicial basica por nome normalizado;
+- verificacao de possivel duplicidade por nome normalizado ou telefone normalizado;
 - preservacao de `ownerId` no cliente criado;
 - criacao sem alterar a cotacao original.
 
 Limitacoes conhecidas do MVP:
 
-- cliente criado a partir de cotacao nao recebe telefone porque a cotacao ainda nao possui esse campo;
+- a conversao copia o telefone da cotacao quando disponivel;
+- sem telefone, a conversao ainda pode usar `"Nao informado"` sem
+  `telefoneNormalizado`, comportamento legado a harmonizar;
 - ainda nao existe vinculo formal `cotacaoOrigemId` entre cliente e cotacao;
-- deduplicacao ainda e basica e nao usa telefone ou e-mail.
+- a regra operacional usa nome normalizado ou telefone normalizado; e-mail,
+  vinculo formal e outros sinais continuam fora da regra atual.
 
 Status comerciais sugeridos:
 
@@ -198,7 +203,8 @@ Plano em fases pequenas:
 - permitir status comercial no `/historico`: concluido em primeira versao;
 - criar `/leads` como visao de oportunidades abertas: concluido em primeira versao;
 - adicionar fluxo manual para converter cotacao fechada em cliente real: concluido em primeira versao;
-- estudar deduplicacao antes de qualquer automacao.
+- estudar identidade operacional mais forte antes de ampliar automacoes, sem
+  substituir o ID documental como identidade persistente.
 
 ## Fase 7: Polimento visual e responsividade mobile
 
@@ -237,3 +243,29 @@ Proximos passos possiveis:
 - testar mobile real depois da hospedagem;
 - revisar formulario de cotacao em celular;
 - documentar estrategia de deploy e hospedagem.
+
+## Fase 8: Firestore, identidade de clientes e isolamento de sessao
+
+Status: concluida, validada e sincronizada com o remote. Deploy nao realizado.
+
+Concluido:
+
+- autocomplete de clientes usando identidade documental;
+- reducao de consultas por telefone com debounce;
+- paginacao de `/clientes`;
+- pesquisa lazy alem da primeira pagina;
+- cache por usuario e diario versionado de mutacoes;
+- edicao telefonica em `/historico`;
+- edicao telefonica em `/leads`;
+- isolamento de sessao nas mutacoes corrigidas de `/clientes` e nas edicoes de
+  `/historico`;
+- persistencia coerente de `telefone` e `telefoneNormalizado`.
+
+Futuro:
+
+- otimizar as cargas de `/historico` e `/leads`;
+- adicionar testes DOM integrados;
+- compactar o diario de mutacoes;
+- evitar carga integral da carteira no autocomplete por nome;
+- tratar clientes legados sem `dataCadastro`;
+- harmonizar a conversao de cotacao sem telefone.

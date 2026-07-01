@@ -19,7 +19,7 @@ Primeira implementacao inicial ja realizada:
 - agrupamento visual de cotacoes relacionadas em oportunidades comerciais no `/leads`;
 - acao manual `Adicionar aos clientes` no `/historico` para cotacoes com `leadStatus = "fechado"`;
 - criacao de cliente com confirmacao humana, preservando `ownerId`;
-- deduplicacao inicial basica por nome normalizado.
+- verificacao de possivel duplicidade por nome normalizado ou telefone normalizado.
 
 `/clientes` segue como carteira de compradores reais.
 
@@ -149,7 +149,8 @@ Fluxo implementado em primeira versao:
 3. A cotacao deixa de aparecer como lead aberto.
 4. O `/historico` oferece a acao explicita `Adicionar aos clientes`.
 5. O usuario confirma manualmente a criacao.
-6. Antes de criar o cliente, o sistema verifica duplicidade basica por nome normalizado.
+6. Antes de criar o cliente, o sistema verifica possivel duplicidade por nome
+   normalizado ou telefone normalizado.
 7. Ao confirmar e nao haver duplicidade, a carteira de `/clientes` passa a representar aquela pessoa como comprador real.
 
 Detalhes da primeira versao:
@@ -157,7 +158,11 @@ Detalhes da primeira versao:
 - a acao aparece somente para cotacoes com `leadStatus = "fechado"`;
 - o cliente criado preserva `ownerId` do usuario autenticado;
 - a acao nao altera a cotacao original;
-- o cliente criado nao recebe telefone porque a cotacao ainda nao possui esse campo;
+- o cliente criado recebe o telefone da cotacao quando disponivel;
+- sem telefone, o comportamento legado pode gravar `"Nao informado"` sem
+  `telefoneNormalizado`; a harmonizacao ficou para ciclo futuro;
+- o telefone copiado passa a pertencer ao novo documento de cliente; edicoes
+  posteriores da cotacao nao sincronizam automaticamente esse cliente;
 - ainda nao existe vinculo formal `cotacaoOrigemId` entre cliente e cotacao.
 
 ## Riscos de duplicidade
@@ -174,8 +179,8 @@ Mitigacoes iniciais:
 
 - usar acao manual `Adicionar aos clientes`;
 - mostrar dados principais da cotacao antes da criacao;
-- buscar cliente existente por nome normalizado nesta primeira versao;
-- evoluir para telefone ou e-mail quando esses dados existirem na cotacao;
+- buscar cliente existente por nome normalizado ou telefone normalizado;
+- avaliar e-mail ou outros sinais como evolucao arquitetural futura;
 - manter a cotacao original no `/historico`;
 - adiar automacoes ate existir criterio confiavel de deduplicacao.
 
@@ -194,7 +199,7 @@ Status: implementada em primeira versao.
 
 - adicionar campos opcionais em novas cotacoes;
 - preservar compatibilidade com cotacoes antigas sem esses campos;
-- manter `ownerId` como fronteira de isolamento;
+- manter `ownerId` como propriedade e fronteira da visao individual;
 - nao migrar documentos antigos sem plano explicito.
 
 ### Fase 3: status no historico
@@ -222,13 +227,14 @@ Status: implementada em primeira versao e evoluida com agrupamento visual de opo
 Status: implementada em primeira versao.
 
 - apos marcar cotacao como `fechado`, exibir acao `Adicionar aos clientes`;
-- conferir possivel cliente existente antes da criacao por nome normalizado;
+- conferir possivel cliente existente por nome normalizado ou telefone normalizado;
 - criar cliente apenas com confirmacao humana;
 - preservar vinculo conceitual com a cotacao de origem.
 
 ### Fase 6: melhorias posteriores
 
-- estudar deduplicacao por telefone, e-mail e nome normalizado;
+- estudar identidade operacional mais forte, incluindo e-mail e vinculos
+  explicitos, sem substituir o ID documental do cliente;
 - avaliar vinculo formal `cotacaoOrigemId` entre cliente e cotacoes fechadas;
 - avaliar captura de telefone no fluxo de cotacao;
 - adicionar metricas de conversao;
