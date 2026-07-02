@@ -105,13 +105,21 @@ As telas abaixo filtram dados por `ownerId`:
 
 Documentos antigos sem `ownerId` nao aparecem nessas telas filtradas. Eles precisam de uma migracao manual ou script separado caso devam voltar a ser acessiveis.
 
-As regras Firestore ainda estao documentadas apenas como proposta em:
+O desenho inicial das Rules permanece registrado em:
 
 ```bash
 docs/firestore-security-proposal.md
 ```
 
-Nenhum deploy de regras deve ser feito sem revisar essa proposta e decidir como tratar documentos antigos.
+O estado posteriormente validado de acesso por perfil e publicacao de Rules
+esta registrado em:
+
+```bash
+docs/access-control-checkpoint.md
+```
+
+A fase Firestore e identidade consolidada em 2026-07-01 nao alterou nem
+republicou Rules. Mudancas futuras ainda devem considerar documentos antigos.
 
 ## Observacao sobre indices Firestore
 

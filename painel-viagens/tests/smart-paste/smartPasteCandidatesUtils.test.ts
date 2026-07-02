@@ -113,4 +113,91 @@ describe('extrairCandidatosSmartPaste', () => {
       },
     ]);
   });
+
+  it('preserva valores originais de ida, volta e total em LATAM ida-volta', () => {
+    const { text } = readFixture('latam', 'ida-volta');
+    const result = extrairCandidatosSmartPaste(text);
+
+    expect(result.companhia).toBe('Latam');
+    expect(result.candidates).toEqual([
+      {
+        trecho: 'ida',
+        raw: {
+          pontos: 28096,
+          taxa: 33.64,
+        },
+        rounded: {
+          pontos: 29,
+          taxa: 34,
+        },
+      },
+      {
+        trecho: 'volta',
+        raw: {
+          pontos: 38885,
+          taxa: 52.04,
+        },
+        rounded: {
+          pontos: 39,
+          taxa: 53,
+        },
+      },
+      {
+        trecho: 'total',
+        raw: {
+          pontos: 66981,
+          taxa: 85.68,
+        },
+        rounded: {
+          pontos: 67,
+          taxa: 86,
+        },
+      },
+    ]);
+  });
+
+  it('mantem multiplas opcoes Azul como candidatos separados por trecho e total', () => {
+    const result = extrairCandidatosSmartPaste(`
+      Azul Linhas Aereas
+      35.200 pontos + R$ 123,45
+      22.100 pontos + R$ 80,10
+      57.300 pontos + R$ 203,55
+    `);
+
+    expect(result.candidates).toEqual([
+      {
+        trecho: 'ida',
+        raw: {
+          pontos: 35200,
+          taxa: 123.45,
+        },
+        rounded: {
+          pontos: 36,
+          taxa: 124,
+        },
+      },
+      {
+        trecho: 'volta',
+        raw: {
+          pontos: 22100,
+          taxa: 80.1,
+        },
+        rounded: {
+          pontos: 23,
+          taxa: 81,
+        },
+      },
+      {
+        trecho: 'total',
+        raw: {
+          pontos: 57300,
+          taxa: 203.55,
+        },
+        rounded: {
+          pontos: 58,
+          taxa: 204,
+        },
+      },
+    ]);
+  });
 });

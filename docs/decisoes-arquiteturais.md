@@ -11,7 +11,8 @@ Registrar decisoes tecnicas e operacionais do CRM Voo Singular para preservar co
 - Usar Firebase Authentication para identificar usuario autenticado.
 - Usar Firestore para `cotacoes` e `clientes`.
 - Gravar `ownerId` em novas cotacoes e novos clientes.
-- Filtrar telas de historico e clientes por `ownerId`.
+- Usar `ownerId` para propriedade e visao individual, com visoes autorizadas por
+  `agencyId` em paginas e perfis especificos.
 - Manter BilhetePreview sem valores internos.
 - Manter Smart Paste global enquanto o Smart Paste Assistido nao estiver pronto.
 - Implementar Smart Paste Assistido como camada de conferencia humana, sem substituir o parser principal.
@@ -22,7 +23,9 @@ Registrar decisoes tecnicas e operacionais do CRM Voo Singular para preservar co
 
 ## Motivo de usar ownerId
 
-`ownerId` e a fronteira atual de isolamento de dados por usuario.
+`ownerId` identifica a propriedade do documento e delimita a visao individual.
+`agencyId` funciona como fronteira organizacional para visoes autorizadas de
+equipe.
 
 Motivos:
 
@@ -32,6 +35,9 @@ Motivos:
 - cria uma base simples para seguranca antes de papeis administrativos mais avancados.
 
 O `ownerId` deve continuar sendo gravado em toda nova cotacao e todo novo cliente.
+A visao de equipe nao elimina ownership: supervisor e admin podem receber
+leitura ou mutacoes limitadas conforme `agencyId`, perfil, visao ativa, pagina
+e Firestore Rules.
 
 ## Motivo de manter BilhetePreview sem valores
 
@@ -162,10 +168,13 @@ Primeira versao implementada:
 
 - a acao `Adicionar aos clientes` aparece no `/historico` somente para cotacoes com `leadStatus = "fechado"`;
 - a criacao do cliente exige confirmacao do usuario;
-- a deduplicacao inicial e basica, por nome normalizado;
+- a deteccao operacional de possivel duplicidade considera nome normalizado ou
+  telefone normalizado;
 - o cliente criado preserva `ownerId` do usuario autenticado;
 - a acao nao altera a cotacao original;
-- o cliente criado nao recebe telefone porque a cotacao ainda nao possui esse campo;
+- o cliente criado recebe o telefone da cotacao quando disponivel;
+- sem telefone, o fluxo legado pode gravar `"Nao informado"` sem
+  `telefoneNormalizado`;
 - ainda nao existe vinculo formal `cotacaoOrigemId` entre cliente e cotacao.
 
 Assim, `/historico` segue como memoria das cotacoes e ponto de acao comercial, `/leads` segue como painel de oportunidades comerciais abertas e `/clientes` segue como carteira de compradores reais.
@@ -178,7 +187,7 @@ Plano de implementacao:
 - permitir atualizar status comercial no `/historico`;
 - criar `/leads` como visao de oportunidades abertas;
 - oferecer acao manual para adicionar cliente depois de marcar cotacao como `fechado`;
-- estudar deduplicacao antes de automatizar conversoes.
+- estudar sinais adicionais antes de automatizar conversoes.
 
 ## Decisao sobre polimento visual e responsividade
 
@@ -206,3 +215,52 @@ Implementado no checkpoint atual:
 A aplicacao ficou mais confortavel para uso em celular, mas o teste mobile real segue pendente ate a aplicacao estar hospedada.
 
 Proximas melhorias de acabamento podem focar em modais em telas pequenas, formulario de cotacao no celular e documentacao de deploy/hospedagem.
+
+## Decisao sobre identidade documental, telefone e sessoes
+
+### Identidade de cliente
+
+Cliente e identificado pelo ID documental do Firestore. Nome e telefone nao sao
+identidade documental. Clientes homonimos com IDs diferentes devem permanecer
+separados no autocomplete, cache, listagem e mutacoes.
+
+Nome normalizado ou telefone normalizado sao usados somente para detectar uma
+possivel duplicidade durante a conversao. Depois que o cliente existe, esses
+campos nao substituem seu ID documental.
+
+### Separacao de entidades
+
+Cliente, cotacao e oportunidade comercial sao entidades distintas. Alterar uma
+cotacao nao altera automaticamente o cliente nem outras cotacoes.
+
+Em `/leads`, o card representa um agrupamento derivado de cotacoes. Nao existe
+documento proprio de oportunidade nesta fase. A edicao telefonica exige uma
+cotacao interna explicitamente selecionada por `cotacao.id` e atualiza somente
+ela.
+
+### Persistencia telefonica
+
+`telefone` e `telefoneNormalizado` formam um par de persistencia. Toda criacao
+ou edicao manual de cliente deve preservar o telefone visual e recalcular o
+normalizado pela funcao central. Telefone vazio grava ambos como `""`.
+
+Documentos antigos nao sao migrados em massa; recebem o par coerente quando
+forem editados.
+
+### Identidade de sessao
+
+Nos fluxos corrigidos nesta fase, formularios e selecoes mutaveis preservam a
+identidade da sessao em que nasceram: usuario, geracao, agencia, perfil e
+contexto da operacao. Essa identidade e validada antes e depois das mutacoes
+explicitamente tratadas nos Ciclos 5B e 6.
+
+Trocas de usuario, perfil ou agencia limpam o estado mutavel. Uma operacao de
+A1 nao pode ser aceita em A2, ainda que UID, agencia, perfil ou referencia do
+usuario parecam iguais.
+
+### Uso eficiente do Firestore
+
+Paginacao e pesquisa lazy sao preferiveis ao carregamento integral. Nos fluxos
+corrigidos nesta fase, resultados assincronos antigos nao podem ser publicados
+em uma sessao nova. Firestore Rules continuam sendo uma defesa adicional, nao
+substituto para as barreiras de sessao aplicadas a esses fluxos.

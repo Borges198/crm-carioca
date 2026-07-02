@@ -19,7 +19,7 @@ CRM Voo Singular, tambem chamado no codigo de Painel de Viagens.
 Branch atual de trabalho:
 
 ```bash
-crm-cotacao
+crm-cotacao-clean
 ```
 
 ## Caminho local
@@ -38,11 +38,14 @@ Aplicacao Next.js:
 
 ## Commit estavel conhecido
 
-Commit registrado como base conhecida nesta documentacao:
+Commit consolidado da fase Firestore e identidade:
 
 ```bash
-b35ef7c10e76aec3128316d0771425e6079fb71a
+eac9c5f51f51ce04ae29bc89f15cb344caba4299
 ```
+
+Esse HEAD esta sincronizado com `origin/crm-cotacao-clean`. O push foi realizado
+e nao houve deploy nesta fase.
 
 ## Funcionalidades atuais
 
@@ -51,9 +54,27 @@ b35ef7c10e76aec3128316d0771425e6079fb71a
 - Cotacao de somente ida ou ida e volta.
 - Campos por trecho para companhia, pontos/milhas, taxa, data, horarios e paradas.
 - Calculo de valor total da cotacao.
-- Historico de cotacoes filtrado por `ownerId`.
-- Cadastro/listagem de clientes filtrado por `ownerId`.
-- Sugestao de nomes de clientes a partir de cotacoes anteriores do usuario autenticado.
+- `/historico` oferece "Minhas cotacoes" por ownership e visao "Equipe" por
+  `agencyId` para supervisor e admin autorizados.
+- Na visao de equipe, a edicao comercial segue o perfil e o contexto; a edicao
+  completa permanece disponivel somente conforme as permissoes validadas.
+- Carteira de clientes filtrada por `ownerId`, com carga inicial paginada,
+  cursor documental e pesquisa lazy alem da primeira pagina.
+- Cache de clientes isolado por usuario, diario versionado de mutacoes e
+  reconciliacao de criacao, edicao e exclusao.
+- Autocomplete alimentado pela collection `clientes`, preservando o ID
+  documental, separando homonimos e preenchendo nome e telefone.
+- Busca telefonica com debounce e descarte de respostas antigas em logout,
+  troca de usuario ou unmount.
+- Edicao telefonica por cotacao selecionada em `/historico` e `/leads`.
+- Criacao e edicao manual de clientes persistem conjuntamente `telefone` e
+  `telefoneNormalizado`.
+- Os fluxos corrigidos preservam a identidade original e descartam resultados
+  obsoletos: criar, editar e excluir em `/clientes`; edicao completa e
+  comercial em `/historico`; e mutacoes protegidas na fase de `/leads`.
+- Essa garantia nao inclui automaticamente toda acao assincrona do CRM. Em
+  particular, exclusao de cotacao e conversao em cliente dentro de
+  `/historico` nao foram incluidas na barreira consolidada do Ciclo 6.
 - Smart Paste global a partir da area de transferencia.
 - Smart Paste por trecho para ida e volta.
 - Geracao de mensagem de WhatsApp apos salvar cotacao.
@@ -99,6 +120,23 @@ Agencia Voo Singular
 ```
 
 No codigo atual, a mensagem e gerada apos salvar a cotacao com sucesso.
+
+## Estado validado da fase Firestore e identidade
+
+- 220/220 testes aprovados;
+- lint aprovado;
+- build e TypeScript aprovados;
+- revisao independente aprovada com ressalvas nao bloqueantes;
+- nenhuma migracao em massa;
+- nenhuma alteracao de Rules ou indices nessa fase.
+
+## Fronteiras de acesso
+
+- `ownerId`: propriedade do documento e visao individual.
+- `agencyId`: fronteira organizacional para visoes de equipe autorizadas.
+- Perfil, pagina, visao ativa e Firestore Rules determinam o limite efetivo da
+  leitura ou mutacao.
+- A visao de equipe nao transfere nem elimina o ownership do documento.
 
 ## Fluxo por trecho
 

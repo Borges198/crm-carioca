@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { Timestamp } from 'firebase/firestore';
 import AuthGuard from '../../components/AuthGuard';
 import EmptyState from '../../components/EmptyState';
@@ -23,10 +23,164 @@ import {
   type LeadStatus,
   type ProdutoOfertado,
 } from '../../lib/leadUtils';
-import { converterCotacaoFechadaEmCliente } from '../../utils/clienteConversionUtils';
+import {
+  converterCotacaoFechadaEmCliente,
+  normalizarTelefoneCliente,
+} from '../../utils/clienteConversionUtils';
 import { filterBySearch, normalizeSearchText } from '../../utils/searchUtils';
 
 type VisaoHistorico = 'minhas' | 'equipe';
+
+export interface IdentidadeSessaoHistorico {
+  userId: string | undefined;
+  geracao: number;
+  visao: VisaoHistorico;
+  agencyId?: string;
+  role?: string;
+}
+
+export interface IdentidadeOperacaoHistorico extends IdentidadeSessaoHistorico {
+  cotacaoId: string;
+  ownerId?: string;
+  operacao: 'editar' | 'comercial';
+  tipoModal: 'completo' | 'comercial';
+}
+
+export interface SelecaoCotacaoComSessao {
+  cotacao: Cotacao;
+  identidade: IdentidadeOperacaoHistorico;
+  tipoModal: 'completo' | 'comercial';
+}
+
+export function criarSelecaoCotacao(
+  cotacao: Cotacao,
+  sessao: IdentidadeSessaoHistorico,
+  tipoModal: 'completo' | 'comercial'
+): SelecaoCotacaoComSessao {
+  return {
+    cotacao,
+    tipoModal,
+    identidade: {
+      ...sessao,
+      cotacaoId: cotacao.id,
+      ownerId: cotacao.ownerId,
+      operacao: tipoModal === 'completo' ? 'editar' : 'comercial',
+      tipoModal,
+    },
+  };
+}
+
+export interface CamposEdicaoCotacao {
+  cliente: string;
+  telefone: string;
+  origem: string;
+  destino: string;
+  companhia: string;
+  valorTotal: number;
+  dataIda: string;
+}
+
+export function criarCamposEdicaoCotacao(cotacao: Cotacao): CamposEdicaoCotacao {
+  return {
+    cliente: cotacao.cliente,
+    telefone: cotacao.telefone ?? '',
+    origem: cotacao.origem,
+    destino: cotacao.destino,
+    companhia: cotacao.companhia,
+    valorTotal: cotacao.valorTotal || 0,
+    dataIda: cotacao.dataIda,
+  };
+}
+
+export function montarPayloadEdicaoCotacao(campos: CamposEdicaoCotacao) {
+  return {
+    cliente: campos.cliente,
+    telefone: campos.telefone,
+    telefoneNormalizado: normalizarTelefoneCliente(campos.telefone),
+    origem: campos.origem,
+    destino: campos.destino,
+    companhia: campos.companhia,
+    valorTotal: Number(campos.valorTotal),
+    dataIda: campos.dataIda,
+  };
+}
+
+export function atualizarCotacaoLocalPorId(
+  cotacoes: Cotacao[],
+  cotacaoId: string,
+  dadosAtualizados: ReturnType<typeof montarPayloadEdicaoCotacao>
+) {
+  return cotacoes.map((item) => (
+    item.id === cotacaoId ? { ...item, ...dadosAtualizados } : item
+  ));
+}
+
+export async function persistirEdicaoCotacao(
+  cotacaoId: string,
+  campos: CamposEdicaoCotacao,
+  atualizar: typeof atualizarCotacao = atualizarCotacao
+) {
+  const dadosAtualizados = montarPayloadEdicaoCotacao(campos);
+  await atualizar(cotacaoId, dadosAtualizados);
+  return dadosAtualizados;
+}
+
+export function podeEditarCotacaoCompleta(
+  role: string | undefined,
+  estaNaVisaoEquipe: boolean
+) {
+  return !(estaNaVisaoEquipe && role === 'supervisor');
+}
+
+export function operacaoHistoricoPertenceASessao(
+  atual: IdentidadeSessaoHistorico,
+  capturada: IdentidadeOperacaoHistorico,
+  userIdAtual: string | undefined,
+  cotacoesAtuais: Cotacao[],
+  cotacaoSelecionadaId: string | undefined,
+  role: string | undefined
+) {
+  if (
+    !userIdAtual
+    || atual.userId !== userIdAtual
+    || atual.userId !== capturada.userId
+    || atual.geracao !== capturada.geracao
+    || atual.visao !== capturada.visao
+    || atual.agencyId !== capturada.agencyId
+    || atual.role !== capturada.role
+    || cotacaoSelecionadaId !== capturada.cotacaoId
+    || capturada.tipoModal === 'completo' && capturada.operacao !== 'editar'
+    || capturada.tipoModal === 'comercial' && capturada.operacao !== 'comercial'
+  ) {
+    return false;
+  }
+
+  const cotacao = cotacoesAtuais.find((item) => item.id === capturada.cotacaoId);
+  if (!cotacao) return false;
+  if (cotacao.ownerId !== capturada.ownerId) return false;
+
+  if (atual.visao === 'equipe') {
+    return Boolean(
+      (role === 'admin' || role === 'supervisor')
+      && atual.agencyId
+      && (!cotacao.agencyId || cotacao.agencyId === atual.agencyId)
+    );
+  }
+
+  return !cotacao.ownerId || cotacao.ownerId === userIdAtual;
+}
+
+export function montarPayloadEdicaoComercial(
+  leadStatus: LeadStatus,
+  produtosOfertados: ProdutoOfertado[],
+  observacao: string
+) {
+  return {
+    leadStatus,
+    produtosOfertados,
+    observacao: observacao.trim(),
+  };
+}
 
 export default function Historico() {
   return (
@@ -45,16 +199,18 @@ function HistoricoContent() {
   const [termoPesquisa, setTermoPesquisa] = useState('');
 
   // Estados para o Modal de Edição de Cotação
-  const [modalEditAberto, setModalEditAberto] = useState(false);
-  const [cotacaoEmEdicao, setCotacaoEmEdicao] = useState<Cotacao | null>(null);
+  const [selecaoEdicao, setSelecaoEdicao] = useState<SelecaoCotacaoComSessao | null>(null);
+  const selecaoEdicaoRef = useRef<SelecaoCotacaoComSessao | null>(null);
   const [editCliente, setEditCliente] = useState('');
+  const [editTelefone, setEditTelefone] = useState('');
   const [editOrigem, setEditOrigem] = useState('');
   const [editDestino, setEditDestino] = useState('');
   const [editCompanhia, setEditCompanhia] = useState('');
   const [editValorTotal, setEditValorTotal] = useState<number>(0);
   const [editDataIda, setEditDataIda] = useState('');
-  const [modalComercialAberto, setModalComercialAberto] = useState(false);
-  const [cotacaoComercialEmEdicao, setCotacaoComercialEmEdicao] = useState<Cotacao | null>(null);
+  const [selecaoComercial, setSelecaoComercial] =
+    useState<SelecaoCotacaoComSessao | null>(null);
+  const selecaoComercialRef = useRef<SelecaoCotacaoComSessao | null>(null);
   const [editLeadStatus, setEditLeadStatus] = useState<LeadStatus>('novo');
   const [editProdutosOfertados, setEditProdutosOfertados] = useState<ProdutoOfertado[]>([]);
   const [editObservacao, setEditObservacao] = useState('');
@@ -69,11 +225,65 @@ function HistoricoContent() {
     && !accessProfile.agencyId;
   const visaoAtiva: VisaoHistorico = perfilPodeVerEquipe ? visaoSelecionada : 'minhas';
   const estaNaVisaoEquipe = visaoAtiva === 'equipe';
-  const usuarioEhSupervisor = accessProfile.role === 'supervisor';
-  const supervisorNaVisaoEquipe = estaNaVisaoEquipe && usuarioEhSupervisor;
+  const permiteEdicaoCompleta = podeEditarCotacaoCompleta(
+    accessProfile.role,
+    estaNaVisaoEquipe
+  );
+  const identidadeSessaoRef = useRef<IdentidadeSessaoHistorico>({
+    userId: user?.uid,
+    geracao: 0,
+    visao: visaoAtiva,
+    agencyId: accessProfile.agencyId,
+    role: accessProfile.role,
+  });
+  const [geracaoSessao, setGeracaoSessao] = useState(0);
+
+  useLayoutEffect(() => {
+    const novaIdentidade: IdentidadeSessaoHistorico = {
+      userId: user?.uid,
+      geracao: identidadeSessaoRef.current.geracao + 1,
+      visao: visaoAtiva,
+      agencyId: accessProfile.agencyId,
+      role: accessProfile.role,
+    };
+    identidadeSessaoRef.current = novaIdentidade;
+    setGeracaoSessao(novaIdentidade.geracao);
+    setCotacoes([]);
+    setCarregando(Boolean(user?.uid));
+    setErroCarregamento('');
+    setTermoPesquisa('');
+    selecaoEdicaoRef.current = null;
+    setSelecaoEdicao(null);
+    setEditCliente('');
+    setEditTelefone('');
+    setEditOrigem('');
+    setEditDestino('');
+    setEditCompanhia('');
+    setEditValorTotal(0);
+    setEditDataIda('');
+    selecaoComercialRef.current = null;
+    setSelecaoComercial(null);
+    setEditLeadStatus('novo');
+    setEditProdutosOfertados([]);
+    setEditObservacao('');
+    return () => {
+      selecaoEdicaoRef.current = null;
+      selecaoComercialRef.current = null;
+      identidadeSessaoRef.current = {
+        userId: undefined,
+        geracao: novaIdentidade.geracao + 1,
+        visao: novaIdentidade.visao,
+      };
+    };
+  }, [accessProfile.agencyId, accessProfile.role, user?.uid, visaoAtiva]);
 
   useEffect(() => {
-    if (!user) {
+    const identidadeBusca = identidadeSessaoRef.current;
+    if (
+      !user
+      || identidadeBusca.userId !== user.uid
+      || identidadeBusca.geracao !== geracaoSessao
+    ) {
       return;
     }
 
@@ -88,12 +298,20 @@ function HistoricoContent() {
           ? await listarCotacoesDaAgencia(accessProfile.agencyId)
           : await listarCotacoesDoUsuario(user.uid);
 
-        if (buscaAtiva) {
+        if (
+          buscaAtiva
+          && identidadeSessaoRef.current.userId === identidadeBusca.userId
+          && identidadeSessaoRef.current.geracao === identidadeBusca.geracao
+        ) {
           setCotacoes(dados);
         }
       } catch (error) {
         console.error("Erro ao buscar histórico:", error);
-        if (buscaAtiva) {
+        if (
+          buscaAtiva
+          && identidadeSessaoRef.current.userId === identidadeBusca.userId
+          && identidadeSessaoRef.current.geracao === identidadeBusca.geracao
+        ) {
           setCotacoes([]);
           setErroCarregamento(
             visaoAtiva === 'equipe'
@@ -102,7 +320,11 @@ function HistoricoContent() {
           );
         }
       } finally {
-        if (buscaAtiva) {
+        if (
+          buscaAtiva
+          && identidadeSessaoRef.current.userId === identidadeBusca.userId
+          && identidadeSessaoRef.current.geracao === identidadeBusca.geracao
+        ) {
           setCarregando(false);
         }
       }
@@ -113,45 +335,87 @@ function HistoricoContent() {
     return () => {
       buscaAtiva = false;
     };
-  }, [accessProfile.agencyId, user, visaoAtiva]);
+  }, [accessProfile.agencyId, geracaoSessao, user, visaoAtiva]);
 
   const abrirModalEdicao = (item: Cotacao) => {
-    setCotacaoEmEdicao(item);
-    setEditCliente(item.cliente);
-    setEditOrigem(item.origem);
-    setEditDestino(item.destino);
-    setEditCompanhia(item.companhia);
-    setEditValorTotal(item.valorTotal || 0);
-    setEditDataIda(item.dataIda);
-    setModalEditAberto(true);
+    const selecao = criarSelecaoCotacao(item, identidadeSessaoRef.current, 'completo');
+    if (
+      !permiteEdicaoCompleta
+      || !operacaoHistoricoPertenceASessao(
+        identidadeSessaoRef.current,
+        selecao.identidade,
+        user?.uid,
+        cotacoes,
+        item.id,
+        accessProfile.role
+      )
+    ) return;
+    const campos = criarCamposEdicaoCotacao(item);
+    selecaoEdicaoRef.current = selecao;
+    setSelecaoEdicao(selecao);
+    setEditCliente(campos.cliente);
+    setEditTelefone(campos.telefone);
+    setEditOrigem(campos.origem);
+    setEditDestino(campos.destino);
+    setEditCompanhia(campos.companhia);
+    setEditValorTotal(campos.valorTotal);
+    setEditDataIda(campos.dataIda);
+  };
+
+  const fecharModalEdicao = () => {
+    selecaoEdicaoRef.current = null;
+    setSelecaoEdicao(null);
   };
 
   const salvarEdicao = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!cotacaoEmEdicao) return;
+    const selecaoOrigem = selecaoEdicao;
+    if (!selecaoOrigem || selecaoEdicaoRef.current !== selecaoOrigem) return;
+
+    const cotacaoId = selecaoOrigem.cotacao.id;
+    const identidadeOperacao = selecaoOrigem.identidade;
+    const operacaoAindaValida = () => permiteEdicaoCompleta
+      && selecaoEdicaoRef.current === selecaoOrigem
+      && operacaoHistoricoPertenceASessao(
+        identidadeSessaoRef.current,
+        identidadeOperacao,
+        user?.uid,
+        cotacoes,
+        selecaoOrigem.cotacao.id,
+        accessProfile.role
+      );
+    if (!operacaoAindaValida()) {
+      selecaoEdicaoRef.current = null;
+      setSelecaoEdicao(null);
+      return;
+    }
 
     try {
-      const dadosAtualizados = {
+      const dadosAtualizados = await persistirEdicaoCotacao(cotacaoId, {
         cliente: editCliente,
+        telefone: editTelefone,
         origem: editOrigem,
         destino: editDestino,
         companhia: editCompanhia,
         valorTotal: Number(editValorTotal),
         dataIda: editDataIda,
-      };
-
-      await atualizarCotacao(cotacaoEmEdicao.id, dadosAtualizados);
+      });
+      if (!operacaoAindaValida()) return;
 
       // Atualiza o estado local imediatamente
-      setCotacoes(prev => prev.map(item => 
-        item.id === cotacaoEmEdicao.id ? { ...item, ...dadosAtualizados } : item
+      setCotacoes(prev => atualizarCotacaoLocalPorId(
+        prev,
+        cotacaoId,
+        dadosAtualizados
       ));
 
-      setModalEditAberto(false);
-      setCotacaoEmEdicao(null);
+      selecaoEdicaoRef.current = null;
+      setSelecaoEdicao(null);
     } catch (error) {
-      console.error("Erro ao salvar edição da cotação:", error);
-      alert("Erro ao salvar modificações.");
+      if (operacaoAindaValida()) {
+        console.error("Erro ao salvar edição da cotação:", error);
+        alert("Erro ao salvar modificações.");
+      }
     }
   };
 
@@ -167,11 +431,25 @@ function HistoricoContent() {
   );
 
   const abrirModalComercial = (item: Cotacao) => {
-    setCotacaoComercialEmEdicao(item);
+    const selecao = criarSelecaoCotacao(item, identidadeSessaoRef.current, 'comercial');
+    if (!operacaoHistoricoPertenceASessao(
+      identidadeSessaoRef.current,
+      selecao.identidade,
+      user?.uid,
+      cotacoes,
+      item.id,
+      accessProfile.role
+    )) return;
+    selecaoComercialRef.current = selecao;
+    setSelecaoComercial(selecao);
     setEditLeadStatus(normalizarLeadStatus(item.leadStatus));
     setEditProdutosOfertados(normalizarProdutosOfertados(item.produtosOfertados));
     setEditObservacao(item.observacao ?? '');
-    setModalComercialAberto(true);
+  };
+
+  const fecharModalComercial = () => {
+    selecaoComercialRef.current = null;
+    setSelecaoComercial(null);
   };
 
   const alternarProdutoOfertado = (produto: ProdutoOfertado) => {
@@ -184,26 +462,47 @@ function HistoricoContent() {
 
   const salvarEdicaoComercial = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!cotacaoComercialEmEdicao) return;
+    const selecaoOrigem = selecaoComercial;
+    if (!selecaoOrigem || selecaoComercialRef.current !== selecaoOrigem) return;
 
-    const dadosComerciais = {
-      leadStatus: editLeadStatus,
-      produtosOfertados: editProdutosOfertados,
-      observacao: editObservacao.trim(),
-    };
+    const cotacaoId = selecaoOrigem.cotacao.id;
+    const identidadeOperacao = selecaoOrigem.identidade;
+    const operacaoAindaValida = () => selecaoComercialRef.current === selecaoOrigem
+      && operacaoHistoricoPertenceASessao(
+      identidadeSessaoRef.current,
+      identidadeOperacao,
+      user?.uid,
+      cotacoes,
+      selecaoOrigem.cotacao.id,
+      accessProfile.role
+    );
+    if (!operacaoAindaValida()) {
+      selecaoComercialRef.current = null;
+      setSelecaoComercial(null);
+      return;
+    }
+
+    const dadosComerciais = montarPayloadEdicaoComercial(
+      editLeadStatus,
+      editProdutosOfertados,
+      editObservacao
+    );
 
     try {
-      await atualizarCotacao(cotacaoComercialEmEdicao.id, dadosComerciais);
+      await atualizarCotacao(cotacaoId, dadosComerciais);
+      if (!operacaoAindaValida()) return;
 
       setCotacoes(prev => prev.map(item =>
-        item.id === cotacaoComercialEmEdicao.id ? { ...item, ...dadosComerciais } : item
+        item.id === cotacaoId ? { ...item, ...dadosComerciais } : item
       ));
 
-      setModalComercialAberto(false);
-      setCotacaoComercialEmEdicao(null);
+      selecaoComercialRef.current = null;
+      setSelecaoComercial(null);
     } catch (error) {
-      console.error("Erro ao salvar dados comerciais:", error);
-      alert("Erro ao salvar dados comerciais.");
+      if (operacaoAindaValida()) {
+        console.error("Erro ao salvar dados comerciais:", error);
+        alert("Erro ao salvar dados comerciais.");
+      }
     }
   };
 
@@ -530,7 +829,7 @@ function HistoricoContent() {
                 )}
 
                 <div className="mt-4 grid grid-cols-2 gap-2">
-                  {!supervisorNaVisaoEquipe && (
+                  {permiteEdicaoCompleta && (
                     <button
                       type="button"
                       onClick={() => abrirModalEdicao(item)}
@@ -542,11 +841,11 @@ function HistoricoContent() {
                   <button
                     type="button"
                     onClick={() => abrirModalComercial(item)}
-                    className={`rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black uppercase text-slate-700 transition hover:bg-slate-100 ${supervisorNaVisaoEquipe ? 'col-span-2' : ''}`}
+                    className={`rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black uppercase text-slate-700 transition hover:bg-slate-100 ${permiteEdicaoCompleta ? '' : 'col-span-2'}`}
                   >
                     Editar comercial
                   </button>
-                  {!supervisorNaVisaoEquipe && item.leadStatus === 'fechado' && (
+                  {permiteEdicaoCompleta && item.leadStatus === 'fechado' && (
                     <button
                       type="button"
                       onClick={() => adicionarAosClientes(item)}
@@ -555,7 +854,7 @@ function HistoricoContent() {
                       Adicionar aos clientes
                     </button>
                   )}
-                  {!supervisorNaVisaoEquipe && (
+                  {permiteEdicaoCompleta && (
                     <button
                       type="button"
                       onClick={() => excluirCotacao(item.id, item.cliente)}
@@ -639,7 +938,7 @@ function HistoricoContent() {
                       >
                         Editar comercial
                       </button>
-                      {!supervisorNaVisaoEquipe && item.leadStatus === 'fechado' && (
+                      {permiteEdicaoCompleta && item.leadStatus === 'fechado' && (
                         <button
                           type="button"
                           onClick={() => adicionarAosClientes(item)}
@@ -653,7 +952,7 @@ function HistoricoContent() {
                       {formatarData(item.dataRegistro)}
                     </td>
                     <td className="px-4 py-4 text-center flex items-center justify-center gap-2 md:px-6">
-                      {!supervisorNaVisaoEquipe && (
+                      {permiteEdicaoCompleta && (
                         <>
                           <button
                             onClick={() => abrirModalEdicao(item)}
@@ -683,7 +982,7 @@ function HistoricoContent() {
       </div>
 
       {/* Modal de Edição de Cotação */}
-      {modalEditAberto && (
+      {selecaoEdicao && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md">
             <h2 className="text-2xl font-bold text-slate-800 mb-6">Editar dados da cotação</h2>
@@ -691,6 +990,10 @@ function HistoricoContent() {
               <div>
                 <label className="text-sm font-semibold text-slate-600">Nome do cliente</label>
                 <input type="text" value={editCliente} onChange={(e) => setEditCliente(e.target.value)} className="w-full mt-1 px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" required />
+              </div>
+              <div>
+                <label className="text-sm font-semibold text-slate-600">Telefone / WhatsApp</label>
+                <input type="tel" value={editTelefone} onChange={(e) => setEditTelefone(e.target.value)} className="w-full mt-1 px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -721,7 +1024,7 @@ function HistoricoContent() {
                 </div>
               </div>
               <div className="flex justify-end gap-3 mt-4">
-                <button type="button" onClick={() => setModalEditAberto(false)} className="px-4 py-2 text-slate-500 font-semibold hover:bg-slate-100 rounded-lg">Cancelar</button>
+                <button type="button" onClick={fecharModalEdicao} className="px-4 py-2 text-slate-500 font-semibold hover:bg-slate-100 rounded-lg">Cancelar</button>
                 <button type="submit" className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-md">Salvar</button>
               </div>
             </form>
@@ -729,12 +1032,12 @@ function HistoricoContent() {
         </div>
       )}
 
-      {modalComercialAberto && (
+      {selecaoComercial && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-lg">
             <h2 className="text-xl font-bold text-slate-800 mb-1">Editar comercial</h2>
             <p className="mb-5 text-sm font-medium text-slate-500">
-              {cotacaoComercialEmEdicao?.cliente}
+              {selecaoComercial.cotacao.cliente}
             </p>
 
             <form onSubmit={salvarEdicaoComercial} className="flex flex-col gap-4">
@@ -779,7 +1082,7 @@ function HistoricoContent() {
               </label>
 
               <div className="flex justify-end gap-3 mt-2">
-                <button type="button" onClick={() => setModalComercialAberto(false)} className="px-4 py-2 text-slate-500 font-semibold hover:bg-slate-100 rounded-lg">Cancelar</button>
+                <button type="button" onClick={fecharModalComercial} className="px-4 py-2 text-slate-500 font-semibold hover:bg-slate-100 rounded-lg">Cancelar</button>
                 <button type="submit" className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-md">Salvar comercial</button>
               </div>
             </form>

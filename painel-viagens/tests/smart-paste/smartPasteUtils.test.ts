@@ -100,4 +100,121 @@ describe('extrairDadosSmartPaste com fixtures reais', () => {
       taxa: result.taxaEmbarque,
     });
   });
+
+  it('extrai origem, destino, datas, horarios, companhia e paradas da fixture LATAM ida-volta', () => {
+    const { text } = readFixture('latam', 'ida-volta');
+    const result = extrairDadosSmartPaste(text);
+
+    expect(result).toMatchObject({
+      tipoVoo: 'ida_volta',
+      origem: 'GRU',
+      destino: 'AJU',
+      dataIda: '2026-07-07',
+      dataVolta: '2026-07-18',
+      horaSaidaIda: '07:15',
+      horaChegadaIda: '09:50',
+      horaSaidaVolta: '10:40',
+      horaChegadaVolta: '13:25',
+      companhia: 'Latam',
+      paradasIda: 'Direto',
+      paradasVolta: 'Direto',
+    });
+  });
+
+  it('caracteriza rota tradicional de ida e volta com origem e destino globais', () => {
+    const result = extrairDadosSmartPaste(`
+      LATAM
+      28/07/2026
+      08:00 GIG
+      10:00 NVT
+      02/08/2026
+      18:00 NVT
+      20:00 GIG
+    `);
+
+    expect(result).toMatchObject({
+      tipoVoo: 'ida_volta',
+      origem: 'GIG',
+      destino: 'NVT',
+      dataIda: '2026-07-28',
+      dataVolta: '2026-08-02',
+      horaSaidaIda: '08:00',
+      horaChegadaIda: '10:00',
+      horaSaidaVolta: '18:00',
+      horaChegadaVolta: '20:00',
+    });
+  });
+
+  it('documenta lacuna atual: Smart Paste nao separa aeroportos diferentes no retorno', () => {
+    const result = extrairDadosSmartPaste(`
+      LATAM
+      28/07/2026
+      08:00 GIG
+      10:00 NVT
+      02/08/2026
+      18:00 NVT
+      20:00 SDU
+    `);
+    const payload = result as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      tipoVoo: 'ida_volta',
+      origem: 'GIG',
+      destino: 'NVT',
+      horaSaidaVolta: '18:00',
+      horaChegadaVolta: '20:00',
+    });
+    expect(payload.origemIda).toBeUndefined();
+    expect(payload.destinoIda).toBeUndefined();
+    expect(payload.origemVolta).toBeUndefined();
+    expect(payload.destinoVolta).toBeUndefined();
+  });
+
+  it('documenta lacuna atual: Smart Paste de um trecho de volta retorna origem e destino genericos', () => {
+    const result = extrairDadosSmartPaste(`
+      GOL
+      02/08/2026
+      18:00 NVT
+      20:00 SDU
+    `);
+    const payload = result as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      tipoVoo: 'ida',
+      origem: 'NVT',
+      destino: 'SDU',
+      dataIda: '2026-08-02',
+      horaSaidaIda: '18:00',
+      horaChegadaIda: '20:00',
+    });
+    expect(payload.origemVolta).toBeUndefined();
+    expect(payload.destinoVolta).toBeUndefined();
+  });
+
+  it('arredonda para cima pontos e taxa encontrados no texto', () => {
+    const result = extrairDadosSmartPaste(`
+      Azul
+      SSA 08:00
+      GRU 10:00
+      35.200 pontos
+      R$ 123,45
+    `);
+
+    expect(result.pontos).toBe('36');
+    expect(result.taxaEmbarque).toBe('124');
+  });
+
+  it('seleciona o maior valor encontrado quando ha multiplos pontos e taxas no texto', () => {
+    const result = extrairDadosSmartPaste(`
+      LATAM
+      GRU 07:15
+      AJU 09:50
+      28.096 milhas + BRL 33,64
+      38.885 milhas + BRL 52,04
+      66.981 milhas + BRL 85,68
+    `);
+
+    expect(result.pontos).toBe('67');
+    expect(result.taxaEmbarque).toBe('86');
+  });
 });

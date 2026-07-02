@@ -11,6 +11,7 @@ import { useAuth } from '../context/AuthContext';
 import { criarCotacao } from '../services/cotacoesService';
 import type { Companhia, NovaCotacao } from '../types';
 import { extrairDadosSmartPaste } from '../utils/smartPasteUtils';
+import { mapearSmartPasteParaTrecho } from '../utils/smartPasteTrechoUtils';
 import { montarNovaCotacao } from '../utils/cotacaoMapper';
 import { gerarMensagemWhatsApp } from '../utils/whatsappMessageUtils';
 import { extrairCandidatosSmartPaste, type SmartPasteCandidate, type SmartPasteCandidatesResult } from '../lib/smartPasteCandidatesUtils';
@@ -31,6 +32,8 @@ export default function Home() {
   const [telefone, setTelefone] = useState('');
   const [origem, setOrigem] = useState('');
   const [destino, setDestino] = useState('');
+  const [origemVolta, setOrigemVolta] = useState('');
+  const [destinoVolta, setDestinoVolta] = useState('');
   const [companhia, setCompanhia] = useState<Companhia>('Azul');
   const [companhiaIda, setCompanhiaIda] = useState('');
   const [companhiaVolta, setCompanhiaVolta] = useState('');
@@ -85,6 +88,8 @@ export default function Home() {
       setCompanhiaVolta(companhiaVolta || companhiaIda || companhiaAtual);
       setPontosIda(pontosIda || pontos);
       setTaxaIda(taxaIda || taxaEmbarque);
+      if (!origemVolta.trim()) setOrigemVolta(destino);
+      if (!destinoVolta.trim()) setDestinoVolta(origem);
       return;
     }
 
@@ -164,22 +169,17 @@ export default function Home() {
     try {
       const dadosExtraidos = await lerDadosSmartPaste();
       if (!dadosExtraidos) return;
+      const updates = mapearSmartPasteParaTrecho('ida', dadosExtraidos);
 
-      if (dadosExtraidos.companhia) setCompanhiaIda(dadosExtraidos.companhia);
-      if (dadosExtraidos.pontos) {
-        setPontosIda(dadosExtraidos.pontos);
-        setPontos(dadosExtraidos.pontos);
-      }
-      if (dadosExtraidos.taxaEmbarque) {
-        setTaxaIda(dadosExtraidos.taxaEmbarque);
-        setTaxaEmbarque(dadosExtraidos.taxaEmbarque);
-      }
-      if (dadosExtraidos.dataIda) setDataIda(dadosExtraidos.dataIda);
-      if (dadosExtraidos.horaSaidaIda) setHoraSaidaIda(dadosExtraidos.horaSaidaIda);
-      if (dadosExtraidos.horaChegadaIda) setHoraChegadaIda(dadosExtraidos.horaChegadaIda);
-      if (dadosExtraidos.paradasIda) setParadasIda(dadosExtraidos.paradasIda);
-      if (dadosExtraidos.origem) setOrigem(dadosExtraidos.origem);
-      if (dadosExtraidos.destino) setDestino(dadosExtraidos.destino);
+      if (updates.companhiaIda) setCompanhiaIda(updates.companhiaIda);
+      if (updates.pontosIda) setPontosIda(updates.pontosIda);
+      if (updates.taxaIda) setTaxaIda(updates.taxaIda);
+      if (updates.dataIda) setDataIda(updates.dataIda);
+      if (updates.horaSaidaIda) setHoraSaidaIda(updates.horaSaidaIda);
+      if (updates.horaChegadaIda) setHoraChegadaIda(updates.horaChegadaIda);
+      if (updates.paradasIda) setParadasIda(updates.paradasIda);
+      if (updates.origem) setOrigem(updates.origem);
+      if (updates.destino) setDestino(updates.destino);
 
       alert("Dados da ida colados com sucesso!");
     } catch {
@@ -191,21 +191,18 @@ export default function Home() {
     try {
       const dadosExtraidos = await lerDadosSmartPaste();
       if (!dadosExtraidos) return;
+      const updates = mapearSmartPasteParaTrecho('volta', dadosExtraidos);
 
       setTipoVoo('ida_volta');
-      if (dadosExtraidos.companhia) setCompanhiaVolta(dadosExtraidos.companhia);
-      if (dadosExtraidos.pontos) setPontosVolta(dadosExtraidos.pontos);
-      if (dadosExtraidos.taxaEmbarque) setTaxaVolta(dadosExtraidos.taxaEmbarque);
-      if (dadosExtraidos.dataVolta) setDataVolta(dadosExtraidos.dataVolta);
-      else if (dadosExtraidos.dataIda) setDataVolta(dadosExtraidos.dataIda);
-      if (dadosExtraidos.horaSaidaVolta) setHoraSaidaVolta(dadosExtraidos.horaSaidaVolta);
-      else if (dadosExtraidos.horaSaidaIda) setHoraSaidaVolta(dadosExtraidos.horaSaidaIda);
-      if (dadosExtraidos.horaChegadaVolta) setHoraChegadaVolta(dadosExtraidos.horaChegadaVolta);
-      else if (dadosExtraidos.horaChegadaIda) setHoraChegadaVolta(dadosExtraidos.horaChegadaIda);
-      if (dadosExtraidos.paradasVolta) setParadasVolta(dadosExtraidos.paradasVolta);
-      else if (dadosExtraidos.paradasIda) setParadasVolta(dadosExtraidos.paradasIda);
-      if (!origem && dadosExtraidos.origem) setOrigem(dadosExtraidos.origem);
-      if (!destino && dadosExtraidos.destino) setDestino(dadosExtraidos.destino);
+      if (updates.companhiaVolta) setCompanhiaVolta(updates.companhiaVolta);
+      if (updates.pontosVolta) setPontosVolta(updates.pontosVolta);
+      if (updates.taxaVolta) setTaxaVolta(updates.taxaVolta);
+      if (updates.dataVolta) setDataVolta(updates.dataVolta);
+      if (updates.horaSaidaVolta) setHoraSaidaVolta(updates.horaSaidaVolta);
+      if (updates.horaChegadaVolta) setHoraChegadaVolta(updates.horaChegadaVolta);
+      if (updates.paradasVolta) setParadasVolta(updates.paradasVolta);
+      if (updates.origemVolta) setOrigemVolta(updates.origemVolta);
+      if (updates.destinoVolta) setDestinoVolta(updates.destinoVolta);
 
       alert("Dados da volta colados com sucesso!");
     } catch {
@@ -225,6 +222,12 @@ export default function Home() {
       }
       if (tipoVoo === 'ida_volta' && (!isHoraValida(horaSaidaVolta) || !isHoraValida(horaChegadaVolta))) {
         alert("Atenção: Os horários do voo de VOLTA estão inválidos."); return;
+      }
+      if (!origem.trim() || !destino.trim()) {
+        alert("Atenção: Preencha a origem e o destino da ida."); return;
+      }
+      if (tipoVoo === 'ida_volta' && (!origemVolta.trim() || !destinoVolta.trim())) {
+        alert("Atenção: Preencha a origem e o destino da volta."); return;
       }
 
       const extrairNumero = (valor: string) => {
@@ -299,6 +302,15 @@ export default function Home() {
       const dataVoltaFormatada = normalizarDataParaCotacao(dataVolta);
       const telefoneCotacao = telefone.trim();
       const telefoneNormalizado = normalizarTelefone(telefoneCotacao);
+      const camposRotasPorTrecho: Partial<Pick<NovaCotacao, 'origemIda' | 'destinoIda' | 'origemVolta' | 'destinoVolta'>> = {
+        origemIda: origem,
+        destinoIda: destino,
+      };
+
+      if (tipoVoo === 'ida_volta') {
+        camposRotasPorTrecho.origemVolta = origemVolta;
+        camposRotasPorTrecho.destinoVolta = destinoVolta;
+      }
 
       const novaCotacao: NovaCotacao = montarNovaCotacao({
         ownerId: user.uid,
@@ -326,6 +338,7 @@ export default function Home() {
         produtosOfertados,
         observacao,
         leadStatus,
+        ...camposRotasPorTrecho,
         ...camposPorTrecho
       });
 
@@ -372,6 +385,8 @@ export default function Home() {
           telefone={telefone} setTelefone={setTelefone}
           origem={origem} setOrigem={setOrigem}
           destino={destino} setDestino={setDestino}
+          origemVolta={origemVolta} setOrigemVolta={setOrigemVolta}
+          destinoVolta={destinoVolta} setDestinoVolta={setDestinoVolta}
           companhia={companhia} setCompanhia={atualizarCompanhia}
           companhiaIda={companhiaIda} setCompanhiaIda={setCompanhiaIda}
           companhiaVolta={companhiaVolta} setCompanhiaVolta={setCompanhiaVolta}
@@ -416,6 +431,10 @@ export default function Home() {
               companhiaVolta={companhiaVolta || undefined}
               origem={origem}
               destino={destino}
+              origemIda={origem}
+              destinoIda={destino}
+              origemVolta={origemVolta}
+              destinoVolta={destinoVolta}
               tipoVoo={tipoVoo} dataIda={dataIda} horaSaidaIda={horaSaidaIda} horaChegadaIda={horaChegadaIda} paradasIda={paradasIda}
               dataVolta={dataVolta} horaSaidaVolta={horaSaidaVolta} horaChegadaVolta={horaChegadaVolta} paradasVolta={paradasVolta}
             />

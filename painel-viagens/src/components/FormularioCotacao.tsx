@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
-import { buscarClientePorTelefoneDoUsuario } from '../services/clientesService';
-import { listarNomesClientesDasCotacoes } from '../services/cotacoesService';
+import {
+  buscarClientePorTelefoneDoUsuario,
+  listarClientesDoUsuario,
+} from '../services/clientesService';
 import type { Cliente, Companhia } from '../types';
 import type { SmartPasteCandidate, SmartPasteCandidatesResult } from '../lib/smartPasteCandidatesUtils';
 import { LEAD_STATUS_OPTIONS, PRODUTOS_OFERTADOS_OPTIONS, type LeadStatus, type ProdutoOfertado } from '../lib/leadUtils';
@@ -20,12 +22,124 @@ const extrairNumero = (value: string) => {
 
 const normalizarTelefone = (value: string) => value.replace(/\D/g, '');
 
+export const DEBOUNCE_PESQUISA_TELEFONE_MS = 400;
+
+export interface SugestaoPorTelefone {
+  userId: string;
+  telefoneNormalizado: string;
+  cliente: Cliente | null;
+}
+
+interface AgendarBuscaClientePorTelefoneParams {
+  userId: string;
+  telefone: string;
+  aoConcluir: (sugestao: SugestaoPorTelefone) => void;
+  aoFalhar?: (error: unknown) => void;
+  buscarCliente?: typeof buscarClientePorTelefoneDoUsuario;
+  atraso?: number;
+}
+
+export function agendarBuscaClientePorTelefone({
+  userId,
+  telefone,
+  aoConcluir,
+  aoFalhar,
+  buscarCliente = buscarClientePorTelefoneDoUsuario,
+  atraso = DEBOUNCE_PESQUISA_TELEFONE_MS,
+}: AgendarBuscaClientePorTelefoneParams) {
+  const telefoneNormalizado = normalizarTelefone(telefone);
+  let buscaAtiva = true;
+
+  if (!userId || !telefoneNormalizado) {
+    return () => {
+      buscaAtiva = false;
+    };
+  }
+
+  const timer = setTimeout(async () => {
+    try {
+      const clienteEncontrado = await buscarCliente(userId, telefoneNormalizado);
+      if (buscaAtiva) {
+        aoConcluir({ userId, telefoneNormalizado, cliente: clienteEncontrado });
+      }
+    } catch (error) {
+      if (buscaAtiva) {
+        aoFalhar?.(error);
+        aoConcluir({ userId, telefoneNormalizado, cliente: null });
+      }
+    }
+  }, atraso);
+
+  return () => {
+    buscaAtiva = false;
+    clearTimeout(timer);
+  };
+}
+
+export function obterClienteSugeridoPorTelefone(
+  sugestao: SugestaoPorTelefone | null,
+  userId: string | undefined,
+  telefone: string
+) {
+  const telefoneNormalizado = normalizarTelefone(telefone);
+
+  if (
+    !userId ||
+    !telefoneNormalizado ||
+    sugestao?.userId !== userId ||
+    sugestao.telefoneNormalizado !== telefoneNormalizado
+  ) {
+    return null;
+  }
+
+  return sugestao.cliente;
+}
+
+export const filtrarClientesPorNome = (clientes: Cliente[], termo: string) => {
+  const termoNormalizado = termo.trim().toLocaleLowerCase('pt-BR');
+
+  if (!termoNormalizado) return [];
+
+  return clientes.filter((cliente) =>
+    cliente.nome.toLocaleLowerCase('pt-BR').includes(termoNormalizado)
+  );
+};
+
+export const obterTelefonePreenchivel = (cliente: Cliente) => {
+  const telefone = cliente.telefone?.trim() ?? '';
+  return telefone && telefone.toLocaleLowerCase('pt-BR') !== 'não informado'
+    ? telefone
+    : '';
+};
+
+export async function carregarClientesDoAutocomplete(userId?: string) {
+  if (!userId) return [];
+
+  try {
+    return await listarClientesDoUsuario(userId);
+  } catch (error) {
+    console.error('Erro ao buscar clientes:', error);
+    return [];
+  }
+}
+
+export function selecionarClienteDoAutocomplete(
+  cliente: Cliente,
+  setCliente: (value: string) => void,
+  setTelefone: (value: string) => void
+) {
+  setCliente(cliente.nome);
+  setTelefone(obterTelefonePreenchivel(cliente));
+}
+
 interface FormularioCotacaoProps {
   userId?: string;
   cliente: string; setCliente: (v: string) => void;
   telefone: string; setTelefone: (v: string) => void;
   origem: string; setOrigem: (v: string) => void;
   destino: string; setDestino: (v: string) => void;
+  origemVolta: string; setOrigemVolta: (v: string) => void;
+  destinoVolta: string; setDestinoVolta: (v: string) => void;
   companhia: Companhia; setCompanhia: (v: Companhia) => void;
   companhiaIda: string; setCompanhiaIda: (v: Companhia) => void;
   companhiaVolta: string; setCompanhiaVolta: (v: Companhia) => void;
@@ -64,6 +178,7 @@ function formatarTrecho(trecho: SmartPasteCandidate['trecho']) {
 export default function FormularioCotacao({
   userId,
   cliente, setCliente, telefone, setTelefone, origem, setOrigem, destino, setDestino,
+  origemVolta, setOrigemVolta, destinoVolta, setDestinoVolta,
   companhia, setCompanhia, companhiaIda, setCompanhiaIda, companhiaVolta, setCompanhiaVolta, tipoVoo, setTipoVoo,
   dataIda, setDataIda, horaSaidaIda, setHoraSaidaIda, horaChegadaIda, setHoraChegadaIda, paradasIda, setParadasIda,
   dataVolta, setDataVolta, horaSaidaVolta, setHoraSaidaVolta, horaChegadaVolta, setHoraChegadaVolta, paradasVolta, setParadasVolta,
@@ -74,12 +189,12 @@ export default function FormularioCotacao({
 }: FormularioCotacaoProps) {
   
   // 🧠 ESTADOS DA MEMÓRIA DE CLIENTES
-  const [clientesAntigos, setClientesAntigos] = useState<string[]>([]);
-  const [mostrarSugestoes, setMostrarSugestoes] = useState(false);
-  const [sugestaoPorTelefone, setSugestaoPorTelefone] = useState<{
-    telefoneNormalizado: string;
-    cliente: Cliente | null;
+  const [clientesCarregados, setClientesCarregados] = useState<{
+    userId: string;
+    clientes: Cliente[];
   } | null>(null);
+  const [mostrarSugestoes, setMostrarSugestoes] = useState(false);
+  const [sugestaoPorTelefone, setSugestaoPorTelefone] = useState<SugestaoPorTelefone | null>(null);
 
   // 🧠 BUSCAR CLIENTES NO FIREBASE AO CARREGAR
   useEffect(() => {
@@ -87,57 +202,60 @@ export default function FormularioCotacao({
       return;
     }
 
-    const buscarNomes = async () => {
-      try {
-        const nomes = await listarNomesClientesDasCotacoes(userId);
-        setClientesAntigos(nomes);
-      } catch (error) {
-        console.error("Erro ao buscar clientes antigos:", error);
+    let buscaAtiva = true;
+
+    const buscarClientes = async () => {
+      const clientes = await carregarClientesDoAutocomplete(userId);
+      if (buscaAtiva) {
+        setClientesCarregados({ userId, clientes });
       }
     };
-    buscarNomes();
+
+    buscarClientes();
+
+    return () => {
+      buscaAtiva = false;
+    };
   }, [userId]);
 
   useEffect(() => {
     const telefoneNormalizado = normalizarTelefone(telefone);
 
     if (!userId || !telefoneNormalizado) {
-      return;
+      let invalidacaoAtiva = true;
+
+      queueMicrotask(() => {
+        if (invalidacaoAtiva) {
+          setSugestaoPorTelefone(null);
+        }
+      });
+
+      return () => {
+        invalidacaoAtiva = false;
+      };
     }
 
-    let buscaAtiva = true;
-
-    const buscarClientePorTelefone = async () => {
-      try {
-        const clienteEncontrado = await buscarClientePorTelefoneDoUsuario(userId, telefoneNormalizado);
-        if (buscaAtiva) {
-          setSugestaoPorTelefone({ telefoneNormalizado, cliente: clienteEncontrado });
-        }
-      } catch (error) {
-        console.error("Erro ao buscar cliente por telefone:", error);
-        if (buscaAtiva) {
-          setSugestaoPorTelefone({ telefoneNormalizado, cliente: null });
-        }
-      }
-    };
-
-    buscarClientePorTelefone();
+    const cancelarBusca = agendarBuscaClientePorTelefone({
+      userId,
+      telefone,
+      aoConcluir: setSugestaoPorTelefone,
+      aoFalhar: (error) => console.error("Erro ao buscar cliente por telefone:", error),
+    });
 
     return () => {
-      buscaAtiva = false;
+      cancelarBusca();
     };
   }, [telefone, userId]);
 
   // 🧠 FILTRAR NOMES CONFORME DIGITAÇÃO
-  const clientesSugeridos = userId
-    ? clientesAntigos.filter(nome => 
-        nome.toLowerCase().includes(cliente.toLowerCase()) && cliente.length > 0
-      )
+  const clientesSugeridos = userId && clientesCarregados?.userId === userId
+    ? filtrarClientesPorNome(clientesCarregados.clientes, cliente)
     : [];
-  const telefoneNormalizadoAtual = normalizarTelefone(telefone);
-  const clienteSugeridoPorTelefone = sugestaoPorTelefone?.telefoneNormalizado === telefoneNormalizadoAtual
-    ? sugestaoPorTelefone.cliente
-    : null;
+  const clienteSugeridoPorTelefone = obterClienteSugeridoPorTelefone(
+    sugestaoPorTelefone,
+    userId,
+    telefone
+  );
   const totalPontosTrechos = extrairNumero(pontosIda) + (tipoVoo === 'ida_volta' ? extrairNumero(pontosVolta) : 0);
   const totalTaxasTrechos = extrairNumero(taxaIda) + (tipoVoo === 'ida_volta' ? extrairNumero(taxaVolta) : 0);
   const mostrarResumoTrechos = Boolean(
@@ -239,16 +357,19 @@ export default function FormularioCotacao({
           {/* LISTA SUSPENSA DE SUGESTÕES */}
           {mostrarSugestoes && clientesSugeridos.length > 0 && (
             <ul className="absolute z-10 w-full bg-white border rounded-lg shadow-lg mt-1 max-h-40 overflow-y-auto">
-              {clientesSugeridos.map((nome, index) => (
+              {clientesSugeridos.map((clienteSugerido) => (
                 <li 
-                  key={index}
-                  className="px-4 py-2 hover:bg-blue-50 cursor-pointer text-slate-700 text-sm font-medium transition"
+                  key={clienteSugerido.id}
+                  className="cursor-pointer px-4 py-2 text-sm transition hover:bg-blue-50"
                   onClick={() => {
-                    setCliente(nome);
+                    selecionarClienteDoAutocomplete(clienteSugerido, setCliente, setTelefone);
                     setMostrarSugestoes(false);
                   }}
                 >
-                  {nome}
+                  <span className="block font-medium text-slate-700">{clienteSugerido.nome}</span>
+                  <span className="block text-xs text-slate-500">
+                    {obterTelefonePreenchivel(clienteSugerido) || 'Telefone não informado'}
+                  </span>
                 </li>
               ))}
             </ul>
@@ -275,11 +396,6 @@ export default function FormularioCotacao({
           </div>
         )}
         
-        <div className="grid grid-cols-2 gap-4">
-          <input type="text" value={origem} onChange={(e) => setOrigem(e.target.value.toUpperCase())} placeholder="Origem (Ex: SSA)" maxLength={3} className="w-full px-4 py-2 border rounded-lg bg-slate-50 uppercase text-center" />
-          <input type="text" value={destino} onChange={(e) => setDestino(e.target.value.toUpperCase())} placeholder="Destino (Ex: CGH)" maxLength={3} className="w-full px-4 py-2 border rounded-lg bg-slate-50 uppercase text-center" />
-        </div>
-
         <div className="flex justify-center bg-slate-100 p-1 rounded-lg">
           <button onClick={() => setTipoVoo('ida')} className={`w-1/2 py-1 text-sm font-bold rounded-md ${tipoVoo === 'ida' ? 'bg-white shadow text-blue-700' : 'text-slate-500'}`}>Somente Ida</button>
           <button onClick={() => setTipoVoo('ida_volta')} className={`w-1/2 py-1 text-sm font-bold rounded-md ${tipoVoo === 'ida_volta' ? 'bg-white shadow text-blue-700' : 'text-slate-500'}`}>Ida e Volta</button>
@@ -295,6 +411,10 @@ export default function FormularioCotacao({
             >
               Colar dados da ida
             </button>
+          </div>
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <input type="text" value={origem} onChange={(e) => setOrigem(e.target.value.toUpperCase())} placeholder="Origem" maxLength={3} className="w-full px-2 py-1 border rounded text-sm bg-white uppercase text-center" />
+            <input type="text" value={destino} onChange={(e) => setDestino(e.target.value.toUpperCase())} placeholder="Destino" maxLength={3} className="w-full px-2 py-1 border rounded text-sm bg-white uppercase text-center" />
           </div>
           <div className="grid grid-cols-2 gap-2 mb-2">
             <input type="date" value={dataIda} onChange={(e) => setDataIda(e.target.value)} className="col-span-2 px-2 py-1 border rounded text-sm bg-white text-slate-700" />
@@ -319,6 +439,10 @@ export default function FormularioCotacao({
               >
                 Colar dados da volta
               </button>
+            </div>
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              <input type="text" value={origemVolta} onChange={(e) => setOrigemVolta(e.target.value.toUpperCase())} placeholder="Origem" maxLength={3} className="w-full px-2 py-1 border rounded text-sm bg-white uppercase text-center" />
+              <input type="text" value={destinoVolta} onChange={(e) => setDestinoVolta(e.target.value.toUpperCase())} placeholder="Destino" maxLength={3} className="w-full px-2 py-1 border rounded text-sm bg-white uppercase text-center" />
             </div>
             <div className="grid grid-cols-2 gap-2 mb-2">
               <input type="date" value={dataVolta} onChange={(e) => setDataVolta(e.target.value)} className="col-span-2 px-2 py-1 border rounded text-sm bg-white text-slate-700" />
