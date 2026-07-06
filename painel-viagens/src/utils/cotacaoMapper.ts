@@ -7,6 +7,7 @@ interface MontarNovaCotacaoInput {
   ownerName?: string;
   ownerEmail?: string;
   agencyId: string;
+  clienteId?: string | null;
   cliente: string;
   telefone?: string;
   telefoneNormalizado?: string;
@@ -105,6 +106,9 @@ export function montarNovaCotacao(input: MontarNovaCotacaoInput): NovaCotacao {
   }
   if (typeof input.valorVolta !== 'undefined') {
     novaCotacao.valorVolta = input.valorVolta;
+  }
+  if (input.clienteId?.trim()) {
+    novaCotacao.clienteId = input.clienteId.trim();
   }
   if (input.telefone) {
     novaCotacao.telefone = input.telefone;

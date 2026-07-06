@@ -15,6 +15,8 @@ import {
   carregarClientesDoAutocomplete,
   DEBOUNCE_PESQUISA_TELEFONE_MS,
   filtrarClientesPorNome,
+  manterClienteSelecionadoAposAlteracaoNome,
+  manterClienteSelecionadoAposAlteracaoTelefone,
   obterClienteSugeridoPorTelefone,
   obterTelefonePreenchivel,
   selecionarClienteDoAutocomplete,
@@ -79,22 +81,57 @@ describe('FormularioCotacao - autocomplete de clientes', () => {
   it('seleciona uma sugestão preenchendo nome e telefone', () => {
     const setCliente = vi.fn();
     const setTelefone = vi.fn();
+    const setClienteSelecionado = vi.fn();
 
-    selecionarClienteDoAutocomplete(clientes[0], setCliente, setTelefone);
+    selecionarClienteDoAutocomplete(
+      clientes[0],
+      setCliente,
+      setTelefone,
+      setClienteSelecionado
+    );
 
     expect(setCliente).toHaveBeenCalledWith('Ana Souza');
     expect(setTelefone).toHaveBeenCalledWith('(79) 99999-1111');
+    expect(setClienteSelecionado).toHaveBeenCalledWith(clientes[0]);
   });
 
   it('seleciona cliente sem telefone deixando o telefone vazio', () => {
     const setCliente = vi.fn();
     const setTelefone = vi.fn();
+    const setClienteSelecionado = vi.fn();
 
-    selecionarClienteDoAutocomplete(clientes[1], setCliente, setTelefone);
+    selecionarClienteDoAutocomplete(
+      clientes[1],
+      setCliente,
+      setTelefone,
+      setClienteSelecionado
+    );
 
     expect(setCliente).toHaveBeenCalledWith('Bruno Lima');
     expect(setTelefone).toHaveBeenCalledWith('');
+    expect(setClienteSelecionado).toHaveBeenCalledWith(clientes[1]);
     expect(obterTelefonePreenchivel(clientes[1])).toBe('');
+  });
+
+  it('alterar nome depois da seleção invalida o cliente selecionado', () => {
+    expect(
+      manterClienteSelecionadoAposAlteracaoNome(clientes[0], 'Cliente B')
+    ).toBeNull();
+  });
+
+  it('alterar telefone depois da seleção invalida o cliente selecionado', () => {
+    expect(
+      manterClienteSelecionadoAposAlteracaoTelefone(clientes[0], '(79) 97777-3333')
+    ).toBeNull();
+  });
+
+  it('digitação manual sem seleção não propaga cliente', () => {
+    expect(
+      manterClienteSelecionadoAposAlteracaoNome(null, 'Cliente Manual')
+    ).toBeNull();
+    expect(
+      manterClienteSelecionadoAposAlteracaoTelefone(null, '(79) 96666-4444')
+    ).toBeNull();
   });
 
   it('mantém clientes homônimos como opções distintas', () => {

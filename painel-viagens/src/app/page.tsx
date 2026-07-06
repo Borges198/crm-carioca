@@ -9,7 +9,7 @@ import FormularioCotacao from '../components/FormularioCotacao';
 import BilhetePreview from '../components/BilhetePreview';
 import { useAuth } from '../context/AuthContext';
 import { criarCotacao } from '../services/cotacoesService';
-import type { Companhia, NovaCotacao } from '../types';
+import type { Cliente, Companhia, NovaCotacao } from '../types';
 import { extrairDadosSmartPaste } from '../utils/smartPasteUtils';
 import { mapearSmartPasteParaTrecho } from '../utils/smartPasteTrechoUtils';
 import { montarNovaCotacao } from '../utils/cotacaoMapper';
@@ -28,6 +28,7 @@ function normalizarTelefone(telefone: string) {
 
 export default function Home() {
   const { user, accessProfile } = useAuth();
+  const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null);
   const [cliente, setCliente] = useState('');
   const [telefone, setTelefone] = useState('');
   const [origem, setOrigem] = useState('');
@@ -317,6 +318,7 @@ export default function Home() {
         ownerName: user.displayName ?? undefined,
         ownerEmail: user.email ?? undefined,
         agencyId: accessProfile.agencyId ?? DEFAULT_AGENCY_ID,
+        clienteId: clienteSelecionado?.id,
         cliente,
         telefone: telefoneCotacao,
         telefoneNormalizado,
@@ -381,6 +383,8 @@ export default function Home() {
         {/* INVOCANDO O FORMULÁRIO */}
         <FormularioCotacao 
           userId={user?.uid}
+          clienteSelecionado={clienteSelecionado}
+          setClienteSelecionado={setClienteSelecionado}
           cliente={cliente} setCliente={setCliente}
           telefone={telefone} setTelefone={setTelefone}
           origem={origem} setOrigem={setOrigem}
