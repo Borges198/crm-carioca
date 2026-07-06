@@ -77,18 +77,38 @@ function getTime(data: Cotacao['dataRegistro']) {
 }
 
 export function montarChaveOportunidade(cotacao: Cotacao) {
-  const identificadorCliente = cotacao.telefoneNormalizado
-    || normalizarTelefoneCliente(cotacao.telefone)
-    || normalizarTexto(cotacao.cliente);
+  const ownerId = cotacao.ownerId?.trim() || 'sem_owner';
+  const clienteId = cotacao.clienteId?.trim();
+  if (clienteId) return `owner:${ownerId}|cliente:${clienteId}`;
 
-  return [
-    cotacao.ownerId ?? 'sem_owner',
-    identificadorCliente || 'sem_cliente',
-    normalizarTexto(cotacao.origem),
-    normalizarTexto(cotacao.destino),
-    normalizarTexto(cotacao.dataIda),
-    normalizarTexto(cotacao.dataVolta),
-  ].join('|');
+  const telefoneNormalizado = normalizarTelefoneCliente(cotacao.telefoneNormalizado)
+    || normalizarTelefoneCliente(cotacao.telefone);
+  if (telefoneNormalizado) {
+    return `owner:${ownerId}|telefone:${telefoneNormalizado}`;
+  }
+
+  const cotacaoLegada = cotacao as Cotacao & {
+    nomeCliente?: string;
+    nome?: string;
+  };
+  const nomeNormalizado = [
+    cotacao.cliente,
+    cotacaoLegada.nomeCliente,
+    cotacaoLegada.nome,
+  ].map(normalizarTexto).find(Boolean) ?? '';
+  if (nomeNormalizado) return `owner:${ownerId}|nome:${nomeNormalizado}`;
+
+  return `owner:${ownerId}|cotacao:${cotacao.id}`;
+}
+
+export function montarDadosViagemCotacao(
+  cotacao: Pick<Cotacao, 'origem' | 'destino' | 'dataIda' | 'dataVolta'>
+) {
+  return {
+    rota: `${cotacao.origem} → ${cotacao.destino}`,
+    dataIda: cotacao.dataIda,
+    dataVolta: cotacao.dataVolta,
+  };
 }
 
 function ordenarPorRegistroMaisRecente(a: Cotacao, b: Cotacao) {
@@ -981,6 +1001,7 @@ function LeadsContent() {
 
                 <div className="mt-5 space-y-3 border-t border-slate-100 pt-4">
                   {oportunidade.cotacoes.map((cotacao) => {
+                    const viagem = montarDadosViagemCotacao(cotacao);
                     const horarioIda = formatarHorario('Ida', cotacao.horaSaidaIda, cotacao.horaChegadaIda);
                     const horariosVolta = getHorariosVolta(cotacao);
                     const horarioVolta = formatarHorario(
@@ -995,6 +1016,11 @@ function LeadsContent() {
                           <div>
                             <p className="text-sm font-black text-slate-800">{formatarCompanhias(cotacao)}</p>
                             <div className="mt-1 space-y-0.5 text-xs font-semibold text-slate-500">
+                              <p>Rota: {viagem.rota}</p>
+                              <p>Ida: {formatarData(viagem.dataIda)}</p>
+                              {viagem.dataVolta && (
+                                <p>Volta: {formatarData(viagem.dataVolta)}</p>
+                              )}
                               <p>Telefone: {cotacao.telefone || 'Sem telefone'}</p>
                               {horarioIda && <p>{horarioIda}</p>}
                               {horarioVolta && <p>{horarioVolta}</p>}

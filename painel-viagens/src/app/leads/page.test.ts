@@ -33,6 +33,7 @@ import {
   identidadeSessaoLeadsCorresponde,
   montarCamposPesquisaOportunidade,
   montarChaveOportunidade,
+  montarDadosViagemCotacao,
   montarPayloadTelefoneCotacao,
   montarPayloadEdicaoComercial,
   podeIniciarEdicaoTelefone,
@@ -61,17 +62,75 @@ function criarCotacao(id: string, overrides: Partial<Cotacao> = {}): Cotacao {
 }
 
 describe('agrupamento de oportunidades em leads', () => {
-  it('usa telefoneNormalizado, owner, rota e datas na chave', () => {
+  it('prioriza clienteId e não inclui rota ou datas na chave', () => {
+    expect(montarChaveOportunidade(criarCotacao('1', {
+      clienteId: 'cliente-1',
+    }))).toBe('owner:usuario-1|cliente:cliente-1');
+  });
+
+  it('agrupa o mesmo clienteId com rotas, datas, telefones e nomes diferentes', () => {
+    const oportunidades = agruparCotacoesEmOportunidades([
+      criarCotacao('1', {
+        clienteId: 'cliente-1',
+        origem: 'RIO',
+        destino: 'SSA',
+        dataIda: '2026-07-10',
+      }),
+      criarCotacao('2', {
+        clienteId: 'cliente-1',
+        cliente: 'Maria S.',
+        telefone: '(82) 98888-2222',
+        telefoneNormalizado: '82988882222',
+        origem: 'RIO',
+        destino: 'AJU',
+        dataIda: '2026-07-15',
+      }),
+    ]);
+
+    expect(oportunidades).toHaveLength(1);
+    expect(oportunidades[0].cotacoes).toHaveLength(2);
+  });
+
+  it('não agrupa clienteId diferentes mesmo com telefone e nome iguais', () => {
+    const oportunidades = agruparCotacoesEmOportunidades([
+      criarCotacao('1', { clienteId: 'cliente-1' }),
+      criarCotacao('2', { clienteId: 'cliente-2' }),
+    ]);
+
+    expect(oportunidades).toHaveLength(2);
+  });
+
+  it('não agrupa cotações de owners diferentes', () => {
+    const oportunidades = agruparCotacoesEmOportunidades([
+      criarCotacao('1', { clienteId: 'cliente-1', ownerId: 'usuario-1' }),
+      criarCotacao('2', { clienteId: 'cliente-1', ownerId: 'usuario-2' }),
+    ]);
+
+    expect(oportunidades).toHaveLength(2);
+  });
+
+  it('usa telefoneNormalizado como fallback legado sem rota ou datas', () => {
     expect(montarChaveOportunidade(criarCotacao('1'))).toBe(
-      'usuario-1|82999991111|mcz|gru|2026-07-01|'
+      'owner:usuario-1|telefone:82999991111'
     );
+    expect(agruparCotacoesEmOportunidades([
+      criarCotacao('1', { origem: 'MCZ', destino: 'GRU', dataIda: '2026-07-01' }),
+      criarCotacao('2', { origem: 'AJU', destino: 'SSA', dataIda: '2026-08-01' }),
+    ])).toHaveLength(1);
   });
 
   it('normaliza telefone formatado quando o campo normalizado não existe', () => {
     expect(montarChaveOportunidade(criarCotacao('1', {
       telefoneNormalizado: undefined,
       telefone: '(82) 98888-2222',
-    }))).toContain('|82988882222|');
+    }))).toBe('owner:usuario-1|telefone:82988882222');
+  });
+
+  it('ignora telefoneNormalizado inválido e normaliza o telefone visual', () => {
+    expect(montarChaveOportunidade(criarCotacao('1', {
+      telefoneNormalizado: '   ',
+      telefone: '(82) 98888-2222',
+    }))).toBe('owner:usuario-1|telefone:82988882222');
   });
 
   it('usa nome normalizado quando telefone está ausente', () => {
@@ -79,12 +138,39 @@ describe('agrupamento de oportunidades em leads', () => {
       cliente: '  Maria   DA Silva ',
       telefone: undefined,
       telefoneNormalizado: undefined,
-    }))).toContain('|maria da silva|');
+    }))).toBe('owner:usuario-1|nome:maria da silva');
+  });
+
+  it('usa cotacao.id quando não existe nenhuma identidade', () => {
+    const primeira = criarCotacao('sem-identidade-1', {
+      cliente: '',
+      telefone: undefined,
+      telefoneNormalizado: undefined,
+    });
+    const segunda = criarCotacao('sem-identidade-2', {
+      cliente: '',
+      telefone: undefined,
+      telefoneNormalizado: undefined,
+    });
+
+    expect(montarChaveOportunidade(primeira)).toBe(
+      'owner:usuario-1|cotacao:sem-identidade-1'
+    );
+    expect(agruparCotacoesEmOportunidades([primeira, segunda])).toHaveLength(2);
   });
 
   it('agrupa várias cotações e escolhe a mais recente como representante', () => {
-    const antiga = criarCotacao('antiga');
+    const antiga = criarCotacao('antiga', {
+      clienteId: 'cliente-1',
+      origem: 'MCZ',
+      destino: 'GRU',
+      dataIda: '2026-07-01',
+    });
     const recente = criarCotacao('recente', {
+      clienteId: 'cliente-1',
+      origem: 'AJU',
+      destino: 'SSA',
+      dataIda: '2026-08-01',
       dataRegistro: '2026-06-30T10:00:00.000Z',
     });
 
@@ -93,6 +179,19 @@ describe('agrupamento de oportunidades em leads', () => {
     expect(oportunidades).toHaveLength(1);
     expect(oportunidades[0].cotacoes).toHaveLength(2);
     expect(oportunidades[0].cotacaoMaisRecente.id).toBe('recente');
+  });
+
+  it('preserva rota e datas para distinguir cada cotação da cartela', () => {
+    expect(montarDadosViagemCotacao(criarCotacao('1', {
+      origem: 'RIO',
+      destino: 'SSA',
+      dataIda: '2026-07-10',
+      dataVolta: '2026-07-20',
+    }))).toEqual({
+      rota: 'RIO → SSA',
+      dataIda: '2026-07-10',
+      dataVolta: '2026-07-20',
+    });
   });
 
   it('mantém grupo único com uma cotação', () => {
