@@ -1,65 +1,91 @@
-# Decisão do fluxo entre clientes, cotações, histórico e leads
+# Decisão do fluxo entre Cliente, Cotação, Histórico e Leads
 
 ## 1. Decisão
 
-Cliente é a entidade central do CRM.
+Esta fase adota as seguintes definições:
 
-Cotação é uma proposta específica.
+- Cliente é a entidade central.
+- Cotação é uma proposta individual.
+- Histórico é a fonte operacional das cotações e dos status.
+- Leads é a cartela comercial agrupada por cliente.
 
-Histórico é a fonte operacional das cotações.
+## 2. Problema observado
 
-Leads é a cartela comercial agrupada por cliente.
+Atualmente, `/leads` ainda agrupa cotações e pode separar o mesmo cliente em
+cards diferentes. Isso pode ocorrer quando mudam o telefone, a rota, o destino,
+a data ou outros campos da cotação.
 
-## 2. Problema atual
+Esses campos descrevem uma proposta ou viagem específica e não devem definir a
+identidade permanente do cliente. O agente não deve precisar caçar cotações
+espalhadas da mesma pessoa.
 
-Atualmente, `/leads` ainda pode separar o mesmo cliente em vários cards porque considera dados da cotação, como telefone, rota, data, origem e destino, na formação dos grupos.
+## 3. Regra comercial
 
-Esses dados descrevem uma proposta ou viagem específica e não devem definir a identidade permanente do cliente. O comportamento atual, portanto, não representa corretamente o fluxo comercial da agência.
-
-## 3. Fluxo comercial oficial
-
-1. O agente cria uma cotação.
-2. A cotação entra no Histórico.
-3. O status comercial é editado no Histórico.
-4. Leads reflete as cotações conforme o status comercial.
-5. Leads agrupa as cotações por cliente.
-6. Um cliente pode ter várias cotações dentro da mesma cartela.
-7. Um cliente pode estar cadastrado e continuar aparecendo em Leads.
-
-## 4. Regras de domínio
-
-- Cliente não deve ser duplicado por ter um destino diferente.
+- Um cliente pode ter várias cotações.
+- Um cliente pode ter várias viagens.
+- Um cliente cadastrado pode continuar aparecendo em Leads e no funil
+  comercial.
+- Cliente não deve ser duplicado por destino diferente.
 - Cotação não deve definir a identidade do cliente.
-- Telefone ajuda a identificar o cliente, mas não deve ser sua única identidade.
-- Cliente cadastrado pode continuar no funil comercial.
-- O status comercial deve ter uma fonte principal: o Histórico.
-- Leads deve refletir o estado comercial sem gerar conflito de status.
+- Telefone ajuda a identificar, mas não deve ser a única identidade.
+
+## 4. Separação de domínio
+
+- **Cliente:** pessoa ou contato comercial.
+- **Cotação:** proposta específica de viagem.
+- **Histórico:** fonte operacional das cotações e dos status.
+- **Leads:** cartela comercial agrupada por cliente.
+
+O status comercial deve ter sua fonte principal em `/historico`. Leads deve
+refletir esse status, sem criar uma fonte concorrente ou conflito de status.
 
 ## 5. Direção técnica futura
 
-- Novas cotações devem salvar `clienteId` quando o cliente for selecionado.
-- Leads deve futuramente agrupar por `ownerId + clienteId`.
-- Documentos antigos devem ter fallback por `telefoneNormalizado`.
-- Quando não houver telefone, o fallback por nome deve ser usado com cautela.
+- `clientes/{clienteId}` representa a identidade oficial do cliente.
+- `cotacoes/{cotacaoId}` representa a proposta individual.
+- Novas cotações devem salvar `clienteId` quando um cliente existente for
+  selecionado.
+- `/leads` deve agrupar por `ownerId + clienteId` quando `clienteId` existir.
 
-Estas definições registram uma direção técnica e não implementam mudanças neste ciclo.
+Estas definições registram uma direção técnica. Nenhuma delas é implementada
+neste ciclo documental.
 
-## 6. Fora do escopo deste documento
+## 6. Fallback para documentos legados
 
-Este ciclo não implementa:
+Documentos antigos precisam de fallback seguro quando não tiverem `clienteId`:
 
-- `clienteId` em cotação;
-- novo agrupamento de leads;
-- mudança de status;
-- alteração de Rules;
-- alteração de permissões;
-- CRUD de usuários;
-- exclusão de clientes;
-- deploy.
+1. Primeiro fallback: `ownerId + telefoneNormalizado`.
+2. Fallback final, usado com cautela: `ownerId + nome normalizado`.
 
-## 7. Próximos ciclos sugeridos
+Nome sozinho não deve ser considerado identidade forte quando houver
+alternativa melhor.
 
-- Ciclo 8 — Salvar `clienteId` em novas cotações.
-- Ciclo 9 — Reagrupar Leads como cartela por cliente.
-- Ciclo 10 — Definir status comercial apenas pelo Histórico.
-- Ciclo 11 — Revisar permissões de supervisor e CRUD de usuários.
+## 7. Fora de escopo desta fase inicial
+
+- CRUD completo de usuários.
+- Bloqueio ou desbloqueio de agente.
+- Exclusão ou inativação de cliente.
+- Alteração ampla de Firestore Rules.
+- Deploy.
+- Migração em massa.
+- Refatoração visual ampla.
+
+Também ficam fora deste ciclo a implementação de `clienteId` nas cotações, a
+mudança do agrupamento de Leads e qualquer alteração de comportamento da
+aplicação.
+
+## 8. Microciclos planejados
+
+- Ciclo 0 — Documento de decisão.
+- Ciclo 1 — Diagnóstico técnico de `clienteId`.
+- Ciclo 2 — Salvar `clienteId` em novas cotações.
+- Ciclo 3 — Diagnóstico de agrupamento de leads.
+- Ciclo 4 — Cartela de leads por cliente.
+- Ciclo 5 — Status com fonte no histórico.
+- Ciclo 6 — Revisão consolidada.
+
+## 9. Limite operacional
+
+Esta decisão não autoriza alteração direta em produção. As próximas mudanças
+devem ocorrer em branch de implementação, ser validadas nos respectivos
+microciclos e não devem alterar produção diretamente.
