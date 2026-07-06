@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Cliente } from '../types';
+import { montarNovaCotacao } from '../utils/cotacaoMapper';
 
 const { listarClientesDoUsuario } = vi.hoisted(() => ({
   listarClientesDoUsuario: vi.fn(),
@@ -17,6 +18,7 @@ import {
   filtrarClientesPorNome,
   manterClienteSelecionadoAposAlteracaoNome,
   manterClienteSelecionadoAposAlteracaoTelefone,
+  obterClienteSelecionadoDaSessao,
   obterClienteSugeridoPorTelefone,
   obterTelefonePreenchivel,
   selecionarClienteDoAutocomplete,
@@ -132,6 +134,71 @@ describe('FormularioCotacao - autocomplete de clientes', () => {
     expect(
       manterClienteSelecionadoAposAlteracaoTelefone(null, '(79) 96666-4444')
     ).toBeNull();
+  });
+
+  it('invalida cliente selecionado quando a sessão muda de A para B', () => {
+    const selecaoDoUsuarioA = {
+      userId: 'usuario-a',
+      geracao: 0,
+      cliente: clientes[0],
+    };
+
+    expect(obterClienteSelecionadoDaSessao(
+      selecaoDoUsuarioA,
+      { userId: 'usuario-a', geracao: 0 }
+    ))
+      .toBe(clientes[0]);
+    expect(obterClienteSelecionadoDaSessao(
+      selecaoDoUsuarioA,
+      { userId: 'usuario-b', geracao: 1 }
+    ))
+      .toBeNull();
+    expect(obterClienteSelecionadoDaSessao(
+      selecaoDoUsuarioA,
+      { userId: undefined, geracao: 1 }
+    ))
+      .toBeNull();
+    expect(obterClienteSelecionadoDaSessao(
+      selecaoDoUsuarioA,
+      { userId: 'usuario-a', geracao: 2 }
+    ))
+      .toBeNull();
+  });
+
+  it('não envia clienteId antigo ao payload depois da troca de usuário', () => {
+    const selecaoDoUsuarioA = {
+      userId: 'usuario-a',
+      geracao: 0,
+      cliente: clientes[0],
+    };
+    const clienteSelecionadoPeloUsuarioB = obterClienteSelecionadoDaSessao(
+      selecaoDoUsuarioA,
+      { userId: 'usuario-b', geracao: 1 }
+    );
+    const payload = montarNovaCotacao({
+      ownerId: 'usuario-b',
+      agencyId: 'agencia-1',
+      clienteId: clienteSelecionadoPeloUsuarioB?.id,
+      cliente: 'Cliente Manual',
+      origem: 'AJU',
+      destino: 'GRU',
+      companhia: 'Latam',
+      tipoVoo: 'ida',
+      dataIda: '10-07-2026',
+      dataVolta: '',
+      horaSaidaIda: '10:00',
+      horaChegadaIda: '12:00',
+      horaSaidaVolta: '',
+      horaChegadaVolta: '',
+      paradasIda: 'Direto',
+      paradasVolta: '',
+      qtdPontos: 10,
+      taxaEmbarque: 20,
+      valorTotal: 500,
+    });
+
+    expect(payload.ownerId).toBe('usuario-b');
+    expect(payload).not.toHaveProperty('clienteId');
   });
 
   it('mantém clientes homônimos como opções distintas', () => {

@@ -30,6 +30,27 @@ export interface SugestaoPorTelefone {
   cliente: Cliente | null;
 }
 
+export interface ClienteSelecionadoPorUsuario {
+  userId: string;
+  geracao: number;
+  cliente: Cliente;
+}
+
+export interface IdentidadeSessaoCotacao {
+  userId?: string;
+  geracao: number;
+}
+
+export function obterClienteSelecionadoDaSessao(
+  selecao: ClienteSelecionadoPorUsuario | null,
+  identidade: IdentidadeSessaoCotacao
+) {
+  return selecao?.userId === identidade.userId
+    && selecao.geracao === identidade.geracao
+    ? selecao.cliente
+    : null;
+}
+
 interface AgendarBuscaClientePorTelefoneParams {
   userId: string;
   telefone: string;
