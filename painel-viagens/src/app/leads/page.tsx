@@ -12,12 +12,10 @@ import { DEFAULT_AGENCY_ID } from '../../types';
 import type { Cotacao } from '../../types';
 import {
   LEAD_STATUS_OPTIONS,
-  PRODUTOS_OFERTADOS_OPTIONS,
   formatarLeadStatus,
   formatarProdutoOfertado,
   isLeadStatusAberto,
   type LeadStatus,
-  type ProdutoOfertado,
 } from '../../lib/leadUtils';
 import {
   converterCotacaoFechadaEmCliente,
@@ -26,6 +24,8 @@ import {
 import { filterBySearch, normalizeSearchText } from '../../utils/searchUtils';
 
 type FiltroStatus = 'abertos' | 'sem_status' | LeadStatus;
+export const TEXTO_ORIENTATIVO_LEADS_LEITURA_COMERCIAL = 'Leads é uma visão de acompanhamento por cliente. Para alterar status, produtos ou observações de uma cotação, use o Histórico.';
+
 type CotacaoComHorariosVolta = Cotacao & {
   horaSaidaVolta?: string;
   horaChegadaVolta?: string;
@@ -317,28 +317,6 @@ export function podeIniciarMutacaoCotacao(
 
 export const podeIniciarEdicaoTelefone = podeIniciarMutacaoCotacao;
 
-export function montarPayloadEdicaoComercial(
-  leadStatus: LeadStatus,
-  produtosOfertados: ProdutoOfertado[],
-  observacao: string
-) {
-  return {
-    leadStatus,
-    produtosOfertados,
-    observacao: observacao.trim(),
-  };
-}
-
-export function atualizarCotacaoComercialPorId(
-  cotacoes: Cotacao[],
-  cotacaoId: string,
-  dadosComerciais: ReturnType<typeof montarPayloadEdicaoComercial>
-) {
-  return cotacoes.map((item) => (
-    item.id === cotacaoId ? { ...item, ...dadosComerciais } : item
-  ));
-}
-
 function formatarCompanhias(cotacao: Cotacao) {
   if (cotacao.companhiaIda || cotacao.companhiaVolta) {
     const ida = cotacao.companhiaIda || cotacao.companhia;
@@ -360,17 +338,6 @@ function getHorariosVolta(cotacao: Cotacao) {
     saida: cotacaoComVolta.horaSaidaVolta,
     chegada: cotacaoComVolta.horaChegadaVolta,
   };
-}
-
-function normalizarLeadStatus(status?: string): LeadStatus {
-  const statusEncontrado = LEAD_STATUS_OPTIONS.find((option) => option.value === status);
-  return statusEncontrado?.value ?? 'novo';
-}
-
-function normalizarProdutosOfertados(produtos?: string[]): ProdutoOfertado[] {
-  return (produtos ?? []).filter((produto): produto is ProdutoOfertado =>
-    PRODUTOS_OFERTADOS_OPTIONS.some((option) => option.value === produto)
-  );
 }
 
 function LeadsContent() {
@@ -395,16 +362,10 @@ function LeadsContent() {
   const [termoPesquisa, setTermoPesquisa] = useState('');
   const [oportunidadeEmConversaoId, setOportunidadeEmConversaoId] = useState<string | null>(null);
   const [clientesAdicionadosIds, setClientesAdicionadosIds] = useState<string[]>([]);
-  const [modalComercialAberto, setModalComercialAberto] = useState(false);
-  const [cotacaoComercialEmEdicao, setCotacaoComercialEmEdicao] = useState<Cotacao | null>(null);
-  const [editLeadStatus, setEditLeadStatus] = useState<LeadStatus>('novo');
-  const [editProdutosOfertados, setEditProdutosOfertados] = useState<ProdutoOfertado[]>([]);
-  const [editObservacao, setEditObservacao] = useState('');
   const [modalTelefoneAberto, setModalTelefoneAberto] = useState(false);
   const [cotacaoTelefoneEmEdicao, setCotacaoTelefoneEmEdicao] = useState<Cotacao | null>(null);
   const [editTelefone, setEditTelefone] = useState('');
   const [salvandoTelefone, setSalvandoTelefone] = useState(false);
-  const [salvandoComercial, setSalvandoComercial] = useState(false);
   const sessaoProntaParaInteracao = sessaoLeadsProntaParaInteracao(
     user ?? undefined,
     sessaoInteracao,
@@ -456,12 +417,6 @@ function LeadsContent() {
         setCotacaoTelefoneEmEdicao(null);
         setEditTelefone('');
         setSalvandoTelefone(false);
-        setModalComercialAberto(false);
-        setCotacaoComercialEmEdicao(null);
-        setEditLeadStatus('novo');
-        setEditProdutosOfertados([]);
-        setEditObservacao('');
-        setSalvandoComercial(false);
         setOportunidadeEmConversaoId(null);
         setClientesAdicionadosIds([]);
       }
@@ -488,12 +443,6 @@ function LeadsContent() {
         setCotacaoTelefoneEmEdicao(null);
         setEditTelefone('');
         setSalvandoTelefone(false);
-        setModalComercialAberto(false);
-        setCotacaoComercialEmEdicao(null);
-        setEditLeadStatus('novo');
-        setEditProdutosOfertados([]);
-        setEditObservacao('');
-        setSalvandoComercial(false);
         setOportunidadeEmConversaoId(null);
         setClientesAdicionadosIds([]);
       });
@@ -648,109 +597,6 @@ function LeadsContent() {
     }
   };
 
-  const abrirModalComercial = (item: Cotacao) => {
-    if (!podeIniciarMutacaoCotacao(
-      item,
-      user,
-      sessaoInteracao,
-      identidadeSessaoAtual,
-      identidadeSessaoRef.current,
-      cotacoes.some((cotacao) => cotacao.id === item.id)
-    )) return;
-
-    setCotacaoComercialEmEdicao(item);
-    setEditLeadStatus(normalizarLeadStatus(item.leadStatus));
-    setEditProdutosOfertados(normalizarProdutosOfertados(item.produtosOfertados));
-    setEditObservacao(item.observacao ?? '');
-    setModalComercialAberto(true);
-  };
-
-  const fecharModalComercial = () => {
-    if (salvandoComercial) return;
-    setModalComercialAberto(false);
-    setCotacaoComercialEmEdicao(null);
-  };
-
-  const alternarProdutoOfertado = (produto: ProdutoOfertado) => {
-    setEditProdutosOfertados((produtosAtuais) => (
-      produtosAtuais.includes(produto)
-        ? produtosAtuais.filter((item) => item !== produto)
-        : [...produtosAtuais, produto]
-    ));
-  };
-
-  const salvarEdicaoComercial = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (
-      !cotacaoComercialEmEdicao
-      || !podeIniciarMutacaoCotacao(
-        cotacaoComercialEmEdicao,
-        user,
-        sessaoInteracao,
-        identidadeSessaoAtual,
-        identidadeSessaoRef.current,
-        cotacoes.some((item) => item.id === cotacaoComercialEmEdicao.id)
-      )
-    ) return;
-
-    const cotacaoId = cotacaoComercialEmEdicao.id;
-    const ownerId = cotacaoComercialEmEdicao.ownerId;
-    const identidadeMutacao = { ...identidadeSessaoRef.current };
-    const dadosComerciais = montarPayloadEdicaoComercial(
-      editLeadStatus,
-      editProdutosOfertados,
-      editObservacao
-    );
-    setSalvandoComercial(true);
-
-    try {
-      await atualizarCotacao(cotacaoId, dadosComerciais);
-      if (!sessaoPodeMutarLeads({
-        userAtual: user,
-        sessaoInstalada: sessaoInteracao,
-        identidadePublicada: identidadeSessaoAtual,
-        identidadeRefAtual: identidadeSessaoRef.current,
-        identidadeCapturada: identidadeMutacao,
-        ownerId,
-        cotacaoAindaValida: cotacoes.some((item) => item.id === cotacaoId),
-      })) return;
-
-      setCotacoes((cotacoesAtuais) => (
-        cotacoesAtuais.some((item) => item.id === cotacaoId && item.ownerId === userId)
-          ? atualizarCotacaoComercialPorId(cotacoesAtuais, cotacaoId, dadosComerciais)
-          : cotacoesAtuais
-      ));
-
-      setModalComercialAberto(false);
-      setCotacaoComercialEmEdicao(null);
-    } catch (error) {
-      if (!sessaoPodeMutarLeads({
-        userAtual: user,
-        sessaoInstalada: sessaoInteracao,
-        identidadePublicada: identidadeSessaoAtual,
-        identidadeRefAtual: identidadeSessaoRef.current,
-        identidadeCapturada: identidadeMutacao,
-        ownerId,
-        cotacaoAindaValida: cotacoes.some((item) => item.id === cotacaoId),
-      })) return;
-
-      console.error('Erro ao salvar dados comerciais:', error);
-      alert('Erro ao salvar dados comerciais.');
-    } finally {
-      if (sessaoPodeMutarLeads({
-        userAtual: user,
-        sessaoInstalada: sessaoInteracao,
-        identidadePublicada: identidadeSessaoAtual,
-        identidadeRefAtual: identidadeSessaoRef.current,
-        identidadeCapturada: identidadeMutacao,
-        ownerId,
-        cotacaoAindaValida: cotacoes.some((item) => item.id === cotacaoId),
-      })) {
-        setSalvandoComercial(false);
-      }
-    }
-  };
-
   const adicionarOportunidadeAosClientes = async (oportunidade: LeadOpportunity) => {
     if (!user) return;
 
@@ -843,6 +689,9 @@ function LeadsContent() {
             </h1>
             <p className="mt-2 pl-5 text-sm font-medium text-slate-500">
               Acompanhamento comercial de cotações ainda abertas.
+            </p>
+            <p className="mt-3 max-w-3xl rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-900">
+              {TEXTO_ORIENTATIVO_LEADS_LEITURA_COMERCIAL}
             </p>
           </div>
         </div>
@@ -1045,21 +894,6 @@ function LeadsContent() {
                           ) && (
                             <button
                               type="button"
-                              onClick={() => abrirModalComercial(cotacao)}
-                              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black uppercase text-slate-700 transition hover:bg-slate-100"
-                            >
-                              Editar comercial
-                            </button>
-                          )}
-                          {podeIniciarMutacaoCotacao(
-                            cotacao,
-                            user,
-                            sessaoInteracao,
-                            identidadeSessaoAtual,
-                            identidadeRefAtualVisual
-                          ) && (
-                            <button
-                              type="button"
                               onClick={() => abrirModalTelefone(cotacao)}
                               className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black uppercase text-blue-700 transition hover:bg-blue-100"
                             >
@@ -1134,71 +968,6 @@ function LeadsContent() {
                   className="rounded-lg bg-blue-600 px-6 py-2 font-bold text-white shadow-md hover:bg-blue-700 disabled:opacity-60"
                 >
                   {salvandoTelefone ? 'Salvando...' : 'Salvar telefone'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {sessaoProntaParaInteracao && modalComercialAberto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
-            <h2 className="mb-1 text-xl font-bold text-slate-800">Editar comercial</h2>
-            <p className="mb-5 text-sm font-medium text-slate-500">
-              {cotacaoComercialEmEdicao?.cliente}
-            </p>
-
-            <form onSubmit={salvarEdicaoComercial} className="flex flex-col gap-4">
-              <label className="block">
-                <span className="text-sm font-semibold text-slate-600">Status comercial</span>
-                <select
-                  value={editLeadStatus}
-                  onChange={(e) => setEditLeadStatus(e.target.value as LeadStatus)}
-                  disabled={salvandoComercial || !sessaoProntaParaInteracao}
-                  className="mt-1 w-full rounded-lg border bg-white px-4 py-2 outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {LEAD_STATUS_OPTIONS.map((status) => (
-                    <option key={status.value} value={status.value}>{status.label}</option>
-                  ))}
-                </select>
-              </label>
-
-              <div>
-                <span className="text-sm font-semibold text-slate-600">Produtos ofertados</span>
-                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {PRODUTOS_OFERTADOS_OPTIONS.map((produto) => (
-                    <label key={produto.value} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={editProdutosOfertados.includes(produto.value)}
-                        onChange={() => alternarProdutoOfertado(produto.value)}
-                        disabled={salvandoComercial || !sessaoProntaParaInteracao}
-                        className="h-4 w-4 rounded border-slate-300 text-blue-600"
-                      />
-                      <span>{produto.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <label className="block">
-                <span className="text-sm font-semibold text-slate-600">Observação comercial</span>
-                <textarea
-                  value={editObservacao}
-                  onChange={(e) => setEditObservacao(e.target.value)}
-                  disabled={salvandoComercial || !sessaoProntaParaInteracao}
-                  className="mt-1 min-h-28 w-full rounded-lg border px-4 py-2 outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Observações internas sobre o acompanhamento"
-                />
-              </label>
-
-              <div className="mt-2 flex justify-end gap-3">
-                <button type="button" onClick={fecharModalComercial} disabled={salvandoComercial || !sessaoProntaParaInteracao} className="rounded-lg px-4 py-2 font-semibold text-slate-500 hover:bg-slate-100 disabled:opacity-60">
-                  Cancelar
-                </button>
-                <button type="submit" disabled={salvandoComercial || !sessaoProntaParaInteracao} className="rounded-lg bg-blue-600 px-6 py-2 font-bold text-white shadow-md hover:bg-blue-700 disabled:opacity-60">
-                  {salvandoComercial ? 'Salvando...' : 'Salvar comercial'}
                 </button>
               </div>
             </form>

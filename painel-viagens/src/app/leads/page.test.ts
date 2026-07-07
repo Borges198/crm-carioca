@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import type { Cotacao } from '../../types';
 import { filterBySearch } from '../../utils/searchUtils';
@@ -29,18 +30,19 @@ import {
   avancarIdentidadeSessaoLeads,
   agruparCotacoesEmOportunidades,
   atualizarTelefoneCotacaoPorId,
-  atualizarCotacaoComercialPorId,
   identidadeSessaoLeadsCorresponde,
   montarCamposPesquisaOportunidade,
   montarChaveOportunidade,
   montarDadosViagemCotacao,
   montarPayloadTelefoneCotacao,
-  montarPayloadEdicaoComercial,
   podeIniciarEdicaoTelefone,
   persistirTelefoneCotacao,
   sessaoPodeMutarLeads,
   sessaoLeadsProntaParaInteracao,
+  TEXTO_ORIENTATIVO_LEADS_LEITURA_COMERCIAL,
 } from './page';
+
+const sourceLeadsPage = readFileSync(new URL('./page.tsx', import.meta.url), 'utf8');
 
 function criarCotacao(id: string, overrides: Partial<Cotacao> = {}): Cotacao {
   return {
@@ -208,6 +210,78 @@ describe('agrupamento de oportunidades em leads', () => {
 
     expect(oportunidades).toHaveLength(1);
     expect(oportunidades[0].cotacoes).toHaveLength(2);
+  });
+});
+
+describe('leitura comercial em leads', () => {
+  it('não mantém botão ou modal de edição comercial na página', () => {
+    expect(sourceLeadsPage).not.toContain('Editar comercial');
+    expect(sourceLeadsPage).not.toContain('Salvar comercial');
+    expect(sourceLeadsPage).not.toContain('modalComercial');
+    expect(sourceLeadsPage).not.toContain('salvarEdicaoComercial');
+  });
+
+  it('não mantém chamada de atualizarCotacao para leadStatus, produtos ou observação', () => {
+    expect(sourceLeadsPage).not.toContain('montarPayloadEdicaoComercial');
+    expect(sourceLeadsPage).not.toContain('atualizarCotacaoComercialPorId');
+    expect(sourceLeadsPage).not.toContain('produtosOfertados,\\n    observacao');
+    expect(sourceLeadsPage).toContain('await atualizar(cotacaoId, dadosAtualizados)');
+  });
+
+  it('preserva status, produtos e observação em modo leitura na cartela', () => {
+    const oportunidades = agruparCotacoesEmOportunidades([
+      criarCotacao('1', {
+        leadStatus: 'negociacao',
+        produtosOfertados: ['passagem_aerea', 'seguro_viagem'],
+        observacao: 'Cliente pediu retorno amanhã',
+      }),
+    ]);
+    const [oportunidade] = oportunidades;
+
+    expect(oportunidade.cotacaoMaisRecente.leadStatus).toBe('negociacao');
+    expect(oportunidade.produtosOfertados).toEqual(['passagem_aerea', 'seguro_viagem']);
+    expect(oportunidade.observacao).toBe('Cliente pediu retorno amanhã');
+    expect(montarCamposPesquisaOportunidade(oportunidade)).toEqual(
+      expect.arrayContaining([
+        'negociacao',
+        'passagem_aerea',
+        'seguro_viagem',
+        'Cliente pediu retorno amanhã',
+      ])
+    );
+  });
+
+  it('mantém cotações internas dentro da cartela agrupada por cliente', () => {
+    const oportunidades = agruparCotacoesEmOportunidades([
+      criarCotacao('ida', { clienteId: 'cliente-1', origem: 'MCZ', destino: 'GRU' }),
+      criarCotacao('volta', { clienteId: 'cliente-1', origem: 'GRU', destino: 'MCZ' }),
+    ]);
+
+    expect(oportunidades).toHaveLength(1);
+    expect(oportunidades[0].cotacoes.map((cotacao) => cotacao.id)).toEqual(['ida', 'volta']);
+  });
+
+  it('mantém busca por produto, observação e status comercial', () => {
+    const oportunidades = agruparCotacoesEmOportunidades([
+      criarCotacao('1', {
+        produtosOfertados: ['cruzeiro'],
+        observacao: 'Interesse em cabine externa',
+        leadStatus: 'aguardando_cliente',
+      }),
+    ]);
+
+    expect(filterBySearch(oportunidades, 'cruzeiro', montarCamposPesquisaOportunidade))
+      .toHaveLength(1);
+    expect(filterBySearch(oportunidades, 'cabine externa', montarCamposPesquisaOportunidade))
+      .toHaveLength(1);
+    expect(filterBySearch(oportunidades, 'aguardando_cliente', montarCamposPesquisaOportunidade))
+      .toHaveLength(1);
+  });
+
+  it('exibe orientação para editar status, produtos e observações no Histórico', () => {
+    expect(TEXTO_ORIENTATIVO_LEADS_LEITURA_COMERCIAL).toBe(
+      'Leads é uma visão de acompanhamento por cliente. Para alterar status, produtos ou observações de uma cotação, use o Histórico.'
+    );
   });
 });
 
@@ -691,32 +765,7 @@ describe('prontidão visual com identidade publicada e ref separadas', () => {
   });
 });
 
-describe('mutação comercial protegida', () => {
-  it('preserva o payload comercial existente', () => {
-    expect(montarPayloadEdicaoComercial(
-      'negociacao',
-      ['passagem_aerea'],
-      ' Retornar amanhã '
-    )).toEqual({
-      leadStatus: 'negociacao',
-      produtosOfertados: ['passagem_aerea'],
-      observacao: 'Retornar amanhã',
-    });
-  });
-
-  it('atualiza comercialmente somente a cotação selecionada', () => {
-    const primeira = criarCotacao('1');
-    const segunda = criarCotacao('2');
-    const resultado = atualizarCotacaoComercialPorId(
-      [primeira, segunda],
-      '1',
-      montarPayloadEdicaoComercial('fechado', [], 'Concluído')
-    );
-
-    expect(resultado[0].leadStatus).toBe('fechado');
-    expect(resultado[1]).toBe(segunda);
-  });
-
+describe('barreira residual sem edição comercial direta', () => {
   it('seleção comercial residual de outro owner é bloqueada inclusive para admin', () => {
     const admin = { uid: 'admin' };
     const identidade = { userId: 'admin', geracao: 8 };
