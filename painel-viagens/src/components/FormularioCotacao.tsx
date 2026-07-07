@@ -45,7 +45,9 @@ export function obterClienteSelecionadoDaSessao(
   selecao: ClienteSelecionadoPorUsuario | null,
   identidade: IdentidadeSessaoCotacao
 ) {
-  return selecao?.userId === identidade.userId
+  if (!selecao) return null;
+
+  return selecao.userId === identidade.userId
     && selecao.geracao === identidade.geracao
     ? selecao.cliente
     : null;
