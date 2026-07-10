@@ -30,6 +30,29 @@ export interface SugestaoPorTelefone {
   cliente: Cliente | null;
 }
 
+export interface ClienteSelecionadoPorUsuario {
+  userId: string;
+  geracao: number;
+  cliente: Cliente;
+}
+
+export interface IdentidadeSessaoCotacao {
+  userId?: string;
+  geracao: number;
+}
+
+export function obterClienteSelecionadoDaSessao(
+  selecao: ClienteSelecionadoPorUsuario | null,
+  identidade: IdentidadeSessaoCotacao
+) {
+  if (!selecao) return null;
+
+  return selecao.userId === identidade.userId
+    && selecao.geracao === identidade.geracao
+    ? selecao.cliente
+    : null;
+}
+
 interface AgendarBuscaClientePorTelefoneParams {
   userId: string;
   telefone: string;
@@ -126,14 +149,42 @@ export async function carregarClientesDoAutocomplete(userId?: string) {
 export function selecionarClienteDoAutocomplete(
   cliente: Cliente,
   setCliente: (value: string) => void,
-  setTelefone: (value: string) => void
+  setTelefone: (value: string) => void,
+  setClienteSelecionado: (value: Cliente | null) => void
 ) {
   setCliente(cliente.nome);
   setTelefone(obterTelefonePreenchivel(cliente));
+  setClienteSelecionado(cliente);
+}
+
+export function manterClienteSelecionadoAposAlteracaoNome(
+  clienteSelecionado: Cliente | null,
+  nome: string
+) {
+  if (!clienteSelecionado) return null;
+
+  return clienteSelecionado.nome.trim().toLocaleLowerCase('pt-BR')
+    === nome.trim().toLocaleLowerCase('pt-BR')
+    ? clienteSelecionado
+    : null;
+}
+
+export function manterClienteSelecionadoAposAlteracaoTelefone(
+  clienteSelecionado: Cliente | null,
+  telefone: string
+) {
+  if (!clienteSelecionado) return null;
+
+  return normalizarTelefone(obterTelefonePreenchivel(clienteSelecionado))
+    === normalizarTelefone(telefone)
+    ? clienteSelecionado
+    : null;
 }
 
 interface FormularioCotacaoProps {
   userId?: string;
+  clienteSelecionado: Cliente | null;
+  setClienteSelecionado: (v: Cliente | null) => void;
   cliente: string; setCliente: (v: string) => void;
   telefone: string; setTelefone: (v: string) => void;
   origem: string; setOrigem: (v: string) => void;
@@ -177,6 +228,7 @@ function formatarTrecho(trecho: SmartPasteCandidate['trecho']) {
 
 export default function FormularioCotacao({
   userId,
+  clienteSelecionado, setClienteSelecionado,
   cliente, setCliente, telefone, setTelefone, origem, setOrigem, destino, setDestino,
   origemVolta, setOrigemVolta, destinoVolta, setDestinoVolta,
   companhia, setCompanhia, companhiaIda, setCompanhiaIda, companhiaVolta, setCompanhiaVolta, tipoVoo, setTipoVoo,
@@ -274,6 +326,7 @@ export default function FormularioCotacao({
     if (!clienteSugeridoPorTelefone) return;
 
     setCliente(clienteSugeridoPorTelefone.nome);
+    setClienteSelecionado(clienteSugeridoPorTelefone);
   };
 
   return (
@@ -346,7 +399,11 @@ export default function FormularioCotacao({
             type="text" 
             value={cliente} 
             onChange={(e) => {
-              setCliente(e.target.value);
+              const novoNome = e.target.value;
+              setCliente(novoNome);
+              setClienteSelecionado(
+                manterClienteSelecionadoAposAlteracaoNome(clienteSelecionado, novoNome)
+              );
               setMostrarSugestoes(true);
             }} 
             onBlur={() => setTimeout(() => setMostrarSugestoes(false), 200)}
@@ -362,7 +419,12 @@ export default function FormularioCotacao({
                   key={clienteSugerido.id}
                   className="cursor-pointer px-4 py-2 text-sm transition hover:bg-blue-50"
                   onClick={() => {
-                    selecionarClienteDoAutocomplete(clienteSugerido, setCliente, setTelefone);
+                    selecionarClienteDoAutocomplete(
+                      clienteSugerido,
+                      setCliente,
+                      setTelefone,
+                      setClienteSelecionado
+                    );
                     setMostrarSugestoes(false);
                   }}
                 >
@@ -379,7 +441,13 @@ export default function FormularioCotacao({
         <input
           type="tel"
           value={telefone}
-          onChange={(e) => setTelefone(e.target.value)}
+          onChange={(e) => {
+            const novoTelefone = e.target.value;
+            setTelefone(novoTelefone);
+            setClienteSelecionado(
+              manterClienteSelecionadoAposAlteracaoTelefone(clienteSelecionado, novoTelefone)
+            );
+          }}
           placeholder="Telefone do solicitante"
           className="w-full px-4 py-2 border rounded-lg bg-slate-50 focus:bg-white transition"
         />

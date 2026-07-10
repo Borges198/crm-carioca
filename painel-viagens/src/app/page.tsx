@@ -5,11 +5,15 @@ import { toPng } from 'html-to-image';
 
 // IMPORTANDO NOSSAS CAIXINHAS DE LEGO
 import { calcularValorTotal, calcularValorTrecho, isHoraValida, normalizarDataParaCotacao } from '../utils/viagemUtils';
-import FormularioCotacao from '../components/FormularioCotacao';
+import FormularioCotacao, {
+  obterClienteSelecionadoDaSessao,
+  type ClienteSelecionadoPorUsuario,
+  type IdentidadeSessaoCotacao,
+} from '../components/FormularioCotacao';
 import BilhetePreview from '../components/BilhetePreview';
 import { useAuth } from '../context/AuthContext';
 import { criarCotacao } from '../services/cotacoesService';
-import type { Companhia, NovaCotacao } from '../types';
+import type { Cliente, Companhia, NovaCotacao } from '../types';
 import { extrairDadosSmartPaste } from '../utils/smartPasteUtils';
 import { mapearSmartPasteParaTrecho } from '../utils/smartPasteTrechoUtils';
 import { montarNovaCotacao } from '../utils/cotacaoMapper';
@@ -28,6 +32,42 @@ function normalizarTelefone(telefone: string) {
 
 export default function Home() {
   const { user, accessProfile } = useAuth();
+  const [estadoSelecaoCliente, setEstadoSelecaoCliente] = useState<{
+    identidade: IdentidadeSessaoCotacao;
+    selecao: ClienteSelecionadoPorUsuario | null;
+  }>({
+    identidade: { userId: user?.uid, geracao: 0 },
+    selecao: null,
+  });
+  const usuarioMudou = estadoSelecaoCliente.identidade.userId !== user?.uid;
+  const identidadeSessao: IdentidadeSessaoCotacao = usuarioMudou
+    ? {
+        userId: user?.uid,
+        geracao: estadoSelecaoCliente.identidade.geracao + 1,
+      }
+    : estadoSelecaoCliente.identidade;
+  if (usuarioMudou) {
+    setEstadoSelecaoCliente({
+      identidade: identidadeSessao,
+      selecao: null,
+    });
+  }
+  const clienteSelecionado = obterClienteSelecionadoDaSessao(
+    usuarioMudou ? null : estadoSelecaoCliente.selecao,
+    identidadeSessao
+  );
+  const setClienteSelecionado = (clienteAtual: Cliente | null) => {
+    setEstadoSelecaoCliente({
+      identidade: identidadeSessao,
+      selecao: clienteAtual && user
+        ? {
+            userId: user.uid,
+            geracao: identidadeSessao.geracao,
+            cliente: clienteAtual,
+          }
+        : null,
+    });
+  };
   const [cliente, setCliente] = useState('');
   const [telefone, setTelefone] = useState('');
   const [origem, setOrigem] = useState('');
@@ -317,6 +357,7 @@ export default function Home() {
         ownerName: user.displayName ?? undefined,
         ownerEmail: user.email ?? undefined,
         agencyId: accessProfile.agencyId ?? DEFAULT_AGENCY_ID,
+        clienteId: clienteSelecionado?.id,
         cliente,
         telefone: telefoneCotacao,
         telefoneNormalizado,
@@ -381,6 +422,8 @@ export default function Home() {
         {/* INVOCANDO O FORMULÁRIO */}
         <FormularioCotacao 
           userId={user?.uid}
+          clienteSelecionado={clienteSelecionado}
+          setClienteSelecionado={setClienteSelecionado}
           cliente={cliente} setCliente={setCliente}
           telefone={telefone} setTelefone={setTelefone}
           origem={origem} setOrigem={setOrigem}

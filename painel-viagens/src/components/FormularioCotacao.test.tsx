@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Cliente } from '../types';
+import { montarNovaCotacao } from '../utils/cotacaoMapper';
 
 const { listarClientesDoUsuario } = vi.hoisted(() => ({
   listarClientesDoUsuario: vi.fn(),
@@ -15,6 +16,9 @@ import {
   carregarClientesDoAutocomplete,
   DEBOUNCE_PESQUISA_TELEFONE_MS,
   filtrarClientesPorNome,
+  manterClienteSelecionadoAposAlteracaoNome,
+  manterClienteSelecionadoAposAlteracaoTelefone,
+  obterClienteSelecionadoDaSessao,
   obterClienteSugeridoPorTelefone,
   obterTelefonePreenchivel,
   selecionarClienteDoAutocomplete,
@@ -79,22 +83,122 @@ describe('FormularioCotacao - autocomplete de clientes', () => {
   it('seleciona uma sugestão preenchendo nome e telefone', () => {
     const setCliente = vi.fn();
     const setTelefone = vi.fn();
+    const setClienteSelecionado = vi.fn();
 
-    selecionarClienteDoAutocomplete(clientes[0], setCliente, setTelefone);
+    selecionarClienteDoAutocomplete(
+      clientes[0],
+      setCliente,
+      setTelefone,
+      setClienteSelecionado
+    );
 
     expect(setCliente).toHaveBeenCalledWith('Ana Souza');
     expect(setTelefone).toHaveBeenCalledWith('(79) 99999-1111');
+    expect(setClienteSelecionado).toHaveBeenCalledWith(clientes[0]);
   });
 
   it('seleciona cliente sem telefone deixando o telefone vazio', () => {
     const setCliente = vi.fn();
     const setTelefone = vi.fn();
+    const setClienteSelecionado = vi.fn();
 
-    selecionarClienteDoAutocomplete(clientes[1], setCliente, setTelefone);
+    selecionarClienteDoAutocomplete(
+      clientes[1],
+      setCliente,
+      setTelefone,
+      setClienteSelecionado
+    );
 
     expect(setCliente).toHaveBeenCalledWith('Bruno Lima');
     expect(setTelefone).toHaveBeenCalledWith('');
+    expect(setClienteSelecionado).toHaveBeenCalledWith(clientes[1]);
     expect(obterTelefonePreenchivel(clientes[1])).toBe('');
+  });
+
+  it('alterar nome depois da seleção invalida o cliente selecionado', () => {
+    expect(
+      manterClienteSelecionadoAposAlteracaoNome(clientes[0], 'Cliente B')
+    ).toBeNull();
+  });
+
+  it('alterar telefone depois da seleção invalida o cliente selecionado', () => {
+    expect(
+      manterClienteSelecionadoAposAlteracaoTelefone(clientes[0], '(79) 97777-3333')
+    ).toBeNull();
+  });
+
+  it('digitação manual sem seleção não propaga cliente', () => {
+    expect(
+      manterClienteSelecionadoAposAlteracaoNome(null, 'Cliente Manual')
+    ).toBeNull();
+    expect(
+      manterClienteSelecionadoAposAlteracaoTelefone(null, '(79) 96666-4444')
+    ).toBeNull();
+  });
+
+  it('invalida cliente selecionado quando a sessão muda de A para B', () => {
+    const selecaoDoUsuarioA = {
+      userId: 'usuario-a',
+      geracao: 0,
+      cliente: clientes[0],
+    };
+
+    expect(obterClienteSelecionadoDaSessao(
+      selecaoDoUsuarioA,
+      { userId: 'usuario-a', geracao: 0 }
+    ))
+      .toBe(clientes[0]);
+    expect(obterClienteSelecionadoDaSessao(
+      selecaoDoUsuarioA,
+      { userId: 'usuario-b', geracao: 1 }
+    ))
+      .toBeNull();
+    expect(obterClienteSelecionadoDaSessao(
+      selecaoDoUsuarioA,
+      { userId: undefined, geracao: 1 }
+    ))
+      .toBeNull();
+    expect(obterClienteSelecionadoDaSessao(
+      selecaoDoUsuarioA,
+      { userId: 'usuario-a', geracao: 2 }
+    ))
+      .toBeNull();
+  });
+
+  it('não envia clienteId antigo ao payload depois da troca de usuário', () => {
+    const selecaoDoUsuarioA = {
+      userId: 'usuario-a',
+      geracao: 0,
+      cliente: clientes[0],
+    };
+    const clienteSelecionadoPeloUsuarioB = obterClienteSelecionadoDaSessao(
+      selecaoDoUsuarioA,
+      { userId: 'usuario-b', geracao: 1 }
+    );
+    const payload = montarNovaCotacao({
+      ownerId: 'usuario-b',
+      agencyId: 'agencia-1',
+      clienteId: clienteSelecionadoPeloUsuarioB?.id,
+      cliente: 'Cliente Manual',
+      origem: 'AJU',
+      destino: 'GRU',
+      companhia: 'Latam',
+      tipoVoo: 'ida',
+      dataIda: '10-07-2026',
+      dataVolta: '',
+      horaSaidaIda: '10:00',
+      horaChegadaIda: '12:00',
+      horaSaidaVolta: '',
+      horaChegadaVolta: '',
+      paradasIda: 'Direto',
+      paradasVolta: '',
+      qtdPontos: 10,
+      taxaEmbarque: 20,
+      valorTotal: 500,
+    });
+
+    expect(payload.ownerId).toBe('usuario-b');
+    expect(payload).not.toHaveProperty('clienteId');
   });
 
   it('mantém clientes homônimos como opções distintas', () => {

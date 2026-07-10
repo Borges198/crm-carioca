@@ -30,6 +30,29 @@ const inputBase = {
 };
 
 describe('montarNovaCotacao - payload persistido', () => {
+  it('inclui clienteId quando o cliente selecionado é recebido', () => {
+    const cotacao = montarNovaCotacao({
+      ...inputBase,
+      clienteId: 'cliente-123',
+    });
+
+    expect(cotacao.clienteId).toBe('cliente-123');
+  });
+
+  it.each([
+    ['ausente', undefined],
+    ['vazio', ''],
+    ['somente espaços', '   '],
+    ['nulo', null],
+  ])('não inclui clienteId quando o valor é %s', (_caso, clienteId) => {
+    const cotacao = montarNovaCotacao({
+      ...inputBase,
+      clienteId,
+    });
+
+    expect(cotacao).not.toHaveProperty('clienteId');
+  });
+
   it('monta payload por trecho com valores calculados e metadados obrigatorios', () => {
     const cotacao = montarNovaCotacao({
       ...inputBase,
@@ -140,6 +163,7 @@ describe('montarNovaCotacao - payload persistido', () => {
     expect(payload.taxaVolta).toBeUndefined();
     expect(payload.valorIda).toBeUndefined();
     expect(payload.valorVolta).toBeUndefined();
+    expect(payload.clienteId).toBeUndefined();
     expect(payload.pontos).toBeUndefined();
     expect(payload.taxaEmbarque).toBeUndefined();
   });

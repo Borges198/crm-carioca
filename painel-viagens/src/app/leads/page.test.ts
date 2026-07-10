@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import type { Cotacao } from '../../types';
 import { filterBySearch } from '../../utils/searchUtils';
@@ -29,17 +30,19 @@ import {
   avancarIdentidadeSessaoLeads,
   agruparCotacoesEmOportunidades,
   atualizarTelefoneCotacaoPorId,
-  atualizarCotacaoComercialPorId,
   identidadeSessaoLeadsCorresponde,
   montarCamposPesquisaOportunidade,
   montarChaveOportunidade,
+  montarDadosViagemCotacao,
   montarPayloadTelefoneCotacao,
-  montarPayloadEdicaoComercial,
   podeIniciarEdicaoTelefone,
   persistirTelefoneCotacao,
   sessaoPodeMutarLeads,
   sessaoLeadsProntaParaInteracao,
+  TEXTO_ORIENTATIVO_LEADS_LEITURA_COMERCIAL,
 } from './page';
+
+const sourceLeadsPage = readFileSync(new URL('./page.tsx', import.meta.url), 'utf8');
 
 function criarCotacao(id: string, overrides: Partial<Cotacao> = {}): Cotacao {
   return {
@@ -61,17 +64,75 @@ function criarCotacao(id: string, overrides: Partial<Cotacao> = {}): Cotacao {
 }
 
 describe('agrupamento de oportunidades em leads', () => {
-  it('usa telefoneNormalizado, owner, rota e datas na chave', () => {
+  it('prioriza clienteId e não inclui rota ou datas na chave', () => {
+    expect(montarChaveOportunidade(criarCotacao('1', {
+      clienteId: 'cliente-1',
+    }))).toBe('owner:usuario-1|cliente:cliente-1');
+  });
+
+  it('agrupa o mesmo clienteId com rotas, datas, telefones e nomes diferentes', () => {
+    const oportunidades = agruparCotacoesEmOportunidades([
+      criarCotacao('1', {
+        clienteId: 'cliente-1',
+        origem: 'RIO',
+        destino: 'SSA',
+        dataIda: '2026-07-10',
+      }),
+      criarCotacao('2', {
+        clienteId: 'cliente-1',
+        cliente: 'Maria S.',
+        telefone: '(82) 98888-2222',
+        telefoneNormalizado: '82988882222',
+        origem: 'RIO',
+        destino: 'AJU',
+        dataIda: '2026-07-15',
+      }),
+    ]);
+
+    expect(oportunidades).toHaveLength(1);
+    expect(oportunidades[0].cotacoes).toHaveLength(2);
+  });
+
+  it('não agrupa clienteId diferentes mesmo com telefone e nome iguais', () => {
+    const oportunidades = agruparCotacoesEmOportunidades([
+      criarCotacao('1', { clienteId: 'cliente-1' }),
+      criarCotacao('2', { clienteId: 'cliente-2' }),
+    ]);
+
+    expect(oportunidades).toHaveLength(2);
+  });
+
+  it('não agrupa cotações de owners diferentes', () => {
+    const oportunidades = agruparCotacoesEmOportunidades([
+      criarCotacao('1', { clienteId: 'cliente-1', ownerId: 'usuario-1' }),
+      criarCotacao('2', { clienteId: 'cliente-1', ownerId: 'usuario-2' }),
+    ]);
+
+    expect(oportunidades).toHaveLength(2);
+  });
+
+  it('usa telefoneNormalizado como fallback legado sem rota ou datas', () => {
     expect(montarChaveOportunidade(criarCotacao('1'))).toBe(
-      'usuario-1|82999991111|mcz|gru|2026-07-01|'
+      'owner:usuario-1|telefone:82999991111'
     );
+    expect(agruparCotacoesEmOportunidades([
+      criarCotacao('1', { origem: 'MCZ', destino: 'GRU', dataIda: '2026-07-01' }),
+      criarCotacao('2', { origem: 'AJU', destino: 'SSA', dataIda: '2026-08-01' }),
+    ])).toHaveLength(1);
   });
 
   it('normaliza telefone formatado quando o campo normalizado não existe', () => {
     expect(montarChaveOportunidade(criarCotacao('1', {
       telefoneNormalizado: undefined,
       telefone: '(82) 98888-2222',
-    }))).toContain('|82988882222|');
+    }))).toBe('owner:usuario-1|telefone:82988882222');
+  });
+
+  it('ignora telefoneNormalizado inválido e normaliza o telefone visual', () => {
+    expect(montarChaveOportunidade(criarCotacao('1', {
+      telefoneNormalizado: '   ',
+      telefone: '(82) 98888-2222',
+    }))).toBe('owner:usuario-1|telefone:82988882222');
   });
 
   it('usa nome normalizado quando telefone está ausente', () => {
@@ -79,12 +140,39 @@ describe('agrupamento de oportunidades em leads', () => {
       cliente: '  Maria   DA Silva ',
       telefone: undefined,
       telefoneNormalizado: undefined,
-    }))).toContain('|maria da silva|');
+    }))).toBe('owner:usuario-1|nome:maria da silva');
+  });
+
+  it('usa cotacao.id quando não existe nenhuma identidade', () => {
+    const primeira = criarCotacao('sem-identidade-1', {
+      cliente: '',
+      telefone: undefined,
+      telefoneNormalizado: undefined,
+    });
+    const segunda = criarCotacao('sem-identidade-2', {
+      cliente: '',
+      telefone: undefined,
+      telefoneNormalizado: undefined,
+    });
+
+    expect(montarChaveOportunidade(primeira)).toBe(
+      'owner:usuario-1|cotacao:sem-identidade-1'
+    );
+    expect(agruparCotacoesEmOportunidades([primeira, segunda])).toHaveLength(2);
   });
 
   it('agrupa várias cotações e escolhe a mais recente como representante', () => {
-    const antiga = criarCotacao('antiga');
+    const antiga = criarCotacao('antiga', {
+      clienteId: 'cliente-1',
+      origem: 'MCZ',
+      destino: 'GRU',
+      dataIda: '2026-07-01',
+    });
     const recente = criarCotacao('recente', {
+      clienteId: 'cliente-1',
+      origem: 'AJU',
+      destino: 'SSA',
+      dataIda: '2026-08-01',
       dataRegistro: '2026-06-30T10:00:00.000Z',
     });
 
@@ -93,6 +181,19 @@ describe('agrupamento de oportunidades em leads', () => {
     expect(oportunidades).toHaveLength(1);
     expect(oportunidades[0].cotacoes).toHaveLength(2);
     expect(oportunidades[0].cotacaoMaisRecente.id).toBe('recente');
+  });
+
+  it('preserva rota e datas para distinguir cada cotação da cartela', () => {
+    expect(montarDadosViagemCotacao(criarCotacao('1', {
+      origem: 'RIO',
+      destino: 'SSA',
+      dataIda: '2026-07-10',
+      dataVolta: '2026-07-20',
+    }))).toEqual({
+      rota: 'RIO → SSA',
+      dataIda: '2026-07-10',
+      dataVolta: '2026-07-20',
+    });
   });
 
   it('mantém grupo único com uma cotação', () => {
@@ -109,6 +210,78 @@ describe('agrupamento de oportunidades em leads', () => {
 
     expect(oportunidades).toHaveLength(1);
     expect(oportunidades[0].cotacoes).toHaveLength(2);
+  });
+});
+
+describe('leitura comercial em leads', () => {
+  it('não mantém botão ou modal de edição comercial na página', () => {
+    expect(sourceLeadsPage).not.toContain('Editar comercial');
+    expect(sourceLeadsPage).not.toContain('Salvar comercial');
+    expect(sourceLeadsPage).not.toContain('modalComercial');
+    expect(sourceLeadsPage).not.toContain('salvarEdicaoComercial');
+  });
+
+  it('não mantém chamada de atualizarCotacao para leadStatus, produtos ou observação', () => {
+    expect(sourceLeadsPage).not.toContain('montarPayloadEdicaoComercial');
+    expect(sourceLeadsPage).not.toContain('atualizarCotacaoComercialPorId');
+    expect(sourceLeadsPage).not.toContain('produtosOfertados,\\n    observacao');
+    expect(sourceLeadsPage).toContain('await atualizar(cotacaoId, dadosAtualizados)');
+  });
+
+  it('preserva status, produtos e observação em modo leitura na cartela', () => {
+    const oportunidades = agruparCotacoesEmOportunidades([
+      criarCotacao('1', {
+        leadStatus: 'negociacao',
+        produtosOfertados: ['passagem_aerea', 'seguro_viagem'],
+        observacao: 'Cliente pediu retorno amanhã',
+      }),
+    ]);
+    const [oportunidade] = oportunidades;
+
+    expect(oportunidade.cotacaoMaisRecente.leadStatus).toBe('negociacao');
+    expect(oportunidade.produtosOfertados).toEqual(['passagem_aerea', 'seguro_viagem']);
+    expect(oportunidade.observacao).toBe('Cliente pediu retorno amanhã');
+    expect(montarCamposPesquisaOportunidade(oportunidade)).toEqual(
+      expect.arrayContaining([
+        'negociacao',
+        'passagem_aerea',
+        'seguro_viagem',
+        'Cliente pediu retorno amanhã',
+      ])
+    );
+  });
+
+  it('mantém cotações internas dentro da cartela agrupada por cliente', () => {
+    const oportunidades = agruparCotacoesEmOportunidades([
+      criarCotacao('ida', { clienteId: 'cliente-1', origem: 'MCZ', destino: 'GRU' }),
+      criarCotacao('volta', { clienteId: 'cliente-1', origem: 'GRU', destino: 'MCZ' }),
+    ]);
+
+    expect(oportunidades).toHaveLength(1);
+    expect(oportunidades[0].cotacoes.map((cotacao) => cotacao.id)).toEqual(['ida', 'volta']);
+  });
+
+  it('mantém busca por produto, observação e status comercial', () => {
+    const oportunidades = agruparCotacoesEmOportunidades([
+      criarCotacao('1', {
+        produtosOfertados: ['cruzeiro'],
+        observacao: 'Interesse em cabine externa',
+        leadStatus: 'aguardando_cliente',
+      }),
+    ]);
+
+    expect(filterBySearch(oportunidades, 'cruzeiro', montarCamposPesquisaOportunidade))
+      .toHaveLength(1);
+    expect(filterBySearch(oportunidades, 'cabine externa', montarCamposPesquisaOportunidade))
+      .toHaveLength(1);
+    expect(filterBySearch(oportunidades, 'aguardando_cliente', montarCamposPesquisaOportunidade))
+      .toHaveLength(1);
+  });
+
+  it('exibe orientação para editar status, produtos e observações no Histórico', () => {
+    expect(TEXTO_ORIENTATIVO_LEADS_LEITURA_COMERCIAL).toBe(
+      'Leads é uma visão de acompanhamento por cliente. Para alterar status, produtos ou observações de uma cotação, use o Histórico.'
+    );
   });
 });
 
@@ -592,32 +765,7 @@ describe('prontidão visual com identidade publicada e ref separadas', () => {
   });
 });
 
-describe('mutação comercial protegida', () => {
-  it('preserva o payload comercial existente', () => {
-    expect(montarPayloadEdicaoComercial(
-      'negociacao',
-      ['passagem_aerea'],
-      ' Retornar amanhã '
-    )).toEqual({
-      leadStatus: 'negociacao',
-      produtosOfertados: ['passagem_aerea'],
-      observacao: 'Retornar amanhã',
-    });
-  });
-
-  it('atualiza comercialmente somente a cotação selecionada', () => {
-    const primeira = criarCotacao('1');
-    const segunda = criarCotacao('2');
-    const resultado = atualizarCotacaoComercialPorId(
-      [primeira, segunda],
-      '1',
-      montarPayloadEdicaoComercial('fechado', [], 'Concluído')
-    );
-
-    expect(resultado[0].leadStatus).toBe('fechado');
-    expect(resultado[1]).toBe(segunda);
-  });
-
+describe('barreira residual sem edição comercial direta', () => {
   it('seleção comercial residual de outro owner é bloqueada inclusive para admin', () => {
     const admin = { uid: 'admin' };
     const identidade = { userId: 'admin', geracao: 8 };
