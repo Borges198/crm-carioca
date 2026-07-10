@@ -136,3 +136,20 @@ Esta fase nao fez:
 - Avaliar teste DOM futuro para `/leads`.
 - Avaliar estrategia de migracao ou associacao manual para cotacoes legadas sem
   `clienteId`.
+
+## Ressalva pos-teste online
+
+Durante teste online/staging da branch `cliente-leads-cartela`, o agrupamento
+por cliente foi validado visualmente.
+
+Tambem foi identificada uma limitacao fora do escopo desta fase: o Smart Paste
+ainda pode nao preencher corretamente informacoes de itinerarios complexos, como
+voos com conexao/paradas, trechos intermediarios, companhias e horarios,
+especialmente quando o voo atravessa de um dia para o outro.
+
+Essa limitacao pertence ao dominio do parser/Smart Paste e nao altera a
+conclusao da fase Cliente e Cartela de Leads, que trata de identidade do
+cliente, `clienteId`, agrupamento por cliente e leitura comercial em `/leads`.
+
+Pendencia futura sugerida: abrir ciclo proprio para Smart Paste de itinerarios
+complexos.
