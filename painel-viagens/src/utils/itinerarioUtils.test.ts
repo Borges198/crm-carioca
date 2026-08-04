@@ -3,7 +3,9 @@ import type { ItinerarioCotacao, SentidoItinerario } from '../types';
 import {
   derivarItinerarioDeCotacaoLegada,
   obterItinerarioEfetivo,
+  projetarItinerarioParaCamposLegados,
   resumirSentidoItinerario,
+  validarENormalizarItinerario,
 } from './itinerarioUtils';
 
 describe('fundacao do modelo de itinerario', () => {
@@ -279,5 +281,353 @@ describe('fundacao do modelo de itinerario', () => {
       quantidadeParadas: 2,
       companhias: ['Azul', 'GOL'],
     });
+  });
+
+  it('valida unknown e produz uma copia canonica sem chaves desconhecidas', () => {
+    const entrada = {
+      versao: 1,
+      campoInesperado: 'não deve sobreviver',
+      ida: {
+        tipo: 'ida',
+        fonte: ' estruturado ',
+        campoInesperado: true,
+        pernas: [{
+          origem: ' aju ',
+          destino: ' gru ',
+          companhia: ' Latam ',
+          numeroVoo: ' LA 3701 ',
+          dataSaida: '03/09/2026',
+          horaSaida: '7:05',
+          dataChegada: '2026-09-03',
+          horaChegada: '09:40',
+          duracao: ' 2h 35m ',
+          observacaoInesperada: 'remover',
+        }],
+        duracaoTotal: ' 2h 35m ',
+        paradas: '  texto informativo ',
+      },
+      volta: null,
+    };
+    const copiaAntes = structuredClone(entrada);
+
+    const itinerario = validarENormalizarItinerario(entrada);
+
+    expect(itinerario).toEqual({
+      versao: 1,
+      ida: {
+        tipo: 'ida',
+        fonte: 'estruturado',
+        pernas: [{
+          origem: 'AJU',
+          destino: 'GRU',
+          companhia: 'Latam',
+          numeroVoo: 'LA 3701',
+          dataSaida: '2026-09-03',
+          horaSaida: '07:05',
+          dataChegada: '2026-09-03',
+          horaChegada: '09:40',
+          duracao: '2h 35m',
+        }],
+        duracaoTotal: '2h 35m',
+        paradas: 'texto informativo',
+      },
+    });
+    expect(entrada).toEqual(copiaAntes);
+    expect(itinerario).not.toBe(entrada);
+    expect(itinerario.ida).not.toBe(entrada.ida);
+    expect(itinerario.ida.pernas[0]).not.toBe(entrada.ida.pernas[0]);
+  });
+
+  it.each([
+    ['raiz não objeto', null, 'itinerario'],
+    ['versão desconhecida', { versao: 2, ida: {} }, 'itinerario.versao'],
+    ['direção incoerente', {
+      versao: 1,
+      ida: { tipo: 'volta', pernas: [{ origem: 'AJU', destino: 'GRU' }] },
+    }, 'itinerario.ida.tipo'],
+    ['lista de pernas vazia', {
+      versao: 1,
+      ida: { tipo: 'ida', pernas: [] },
+    }, 'itinerario.ida.pernas'],
+    ['origem ausente', {
+      versao: 1,
+      ida: { tipo: 'ida', pernas: [{ destino: 'GRU' }] },
+    }, 'itinerario.ida.pernas[0].origem'],
+    ['data impossível', {
+      versao: 1,
+      ida: {
+        tipo: 'ida',
+        pernas: [{ origem: 'AJU', destino: 'GRU', dataSaida: '2026-02-30' }],
+      },
+    }, 'itinerario.ida.pernas[0].dataSaida'],
+    ['horário impossível', {
+      versao: 1,
+      ida: {
+        tipo: 'ida',
+        pernas: [{ origem: 'AJU', destino: 'GRU', horaSaida: '24:00' }],
+      },
+    }, 'itinerario.ida.pernas[0].horaSaida'],
+    ['conexão descontínua', {
+      versao: 1,
+      ida: {
+        tipo: 'ida',
+        pernas: [
+          { origem: 'AJU', destino: 'GRU' },
+          { origem: 'VCP', destino: 'BSB' },
+        ],
+      },
+    }, 'itinerario.ida.pernas[1].origem'],
+  ])('rejeita %s com caminho preciso', (_caso, entrada, caminho) => {
+    expect(() => validarENormalizarItinerario(entrada)).toThrow(caminho);
+  });
+
+  it('rejeita chegada anterior a saida dentro da mesma perna', () => {
+    expect(() => validarENormalizarItinerario({
+      versao: 1,
+      ida: {
+        tipo: 'ida',
+        pernas: [{
+          origem: 'AJU',
+          destino: 'GRU',
+          dataSaida: '2026-09-03',
+          horaSaida: '18:00',
+          dataChegada: '2026-09-03',
+          horaChegada: '17:59',
+        }],
+      },
+    })).toThrow('itinerario.ida.pernas[0].dataChegada');
+  });
+
+  it('aceita chegada no dia seguinte dentro da mesma perna', () => {
+    const itinerario = validarENormalizarItinerario({
+      versao: 1,
+      ida: {
+        tipo: 'ida',
+        pernas: [{
+          origem: 'AJU',
+          destino: 'GRU',
+          dataSaida: '2026-09-03',
+          horaSaida: '23:30',
+          dataChegada: '2026-09-04',
+          horaChegada: '00:20',
+        }],
+      },
+    });
+
+    expect(itinerario.ida.pernas[0].dataChegada).toBe('2026-09-04');
+  });
+
+  it('rejeita conexao cuja proxima saida antecede a chegada anterior', () => {
+    expect(() => validarENormalizarItinerario({
+      versao: 1,
+      ida: {
+        tipo: 'ida',
+        pernas: [
+          {
+            origem: 'AJU',
+            destino: 'GRU',
+            dataChegada: '2026-09-03',
+            horaChegada: '14:30',
+          },
+          {
+            origem: 'GRU',
+            destino: 'BSB',
+            dataSaida: '2026-09-03',
+            horaSaida: '14:20',
+          },
+        ],
+      },
+    })).toThrow('itinerario.ida.pernas[1].dataSaida');
+  });
+
+  it('valida cronologia apenas quando os instantes comparados estao completos', () => {
+    const itinerario = validarENormalizarItinerario({
+      versao: 1,
+      ida: {
+        tipo: 'ida',
+        pernas: [
+          {
+            origem: 'AJU',
+            destino: 'GRU',
+            dataSaida: '2026-09-03',
+            horaSaida: '18:00',
+            horaChegada: '17:00',
+          },
+          {
+            origem: 'GRU',
+            destino: 'BSB',
+            dataSaida: '2026-09-03',
+            horaSaida: '16:00',
+          },
+        ],
+      },
+    });
+
+    expect(itinerario.ida.pernas).toHaveLength(2);
+  });
+
+  it('projeta ida e volta com múltiplas pernas sem perder o itinerário detalhado', () => {
+    const entrada = {
+      versao: 1,
+      ida: {
+        tipo: 'ida',
+        fonte: 'estruturado',
+        duracaoTotal: '17h 35m',
+        pernas: [
+          {
+            origem: 'GIG',
+            destino: 'VCP',
+            companhia: 'Azul',
+            numeroVoo: 'AD 4101',
+            dataSaida: '2026-08-23',
+            horaSaida: '20:40',
+            dataChegada: '2026-08-23',
+            horaChegada: '21:50',
+          },
+          {
+            origem: 'VCP',
+            destino: 'AJU',
+            companhia: 'GOL',
+            numeroVoo: 'G3 1902',
+            dataSaida: '2026-08-24',
+            horaSaida: '12:20',
+            dataChegada: '2026-08-24',
+            horaChegada: '14:15',
+          },
+        ],
+      },
+      volta: {
+        tipo: 'volta',
+        fonte: 'estruturado',
+        duracaoTotal: '2h 20m',
+        pernas: [{
+          origem: 'AJU',
+          destino: 'GIG',
+          companhia: 'Latam',
+          numeroVoo: 'LA 3810',
+          dataSaida: '2026-09-02',
+          horaSaida: '18:00',
+          dataChegada: '2026-09-02',
+          horaChegada: '20:20',
+        }],
+      },
+    };
+    const copiaAntes = structuredClone(entrada);
+    const itinerario = validarENormalizarItinerario(entrada);
+
+    expect(projetarItinerarioParaCamposLegados(itinerario)).toEqual({
+      tipoVoo: 'ida_volta',
+      origem: 'GIG',
+      destino: 'AJU',
+      origemIda: 'GIG',
+      destinoIda: 'AJU',
+      origemVolta: 'AJU',
+      destinoVolta: 'GIG',
+      companhia: 'Azul',
+      companhiaIda: 'Azul',
+      companhiaVolta: 'Latam',
+      dataIda: '23-08-2026',
+      dataVolta: '02-09-2026',
+      horaSaidaIda: '20:40',
+      horaChegadaIda: '14:15',
+      horaSaidaVolta: '18:00',
+      horaChegadaVolta: '20:20',
+      duracaoIda: '17h 35m',
+      duracaoVolta: '2h 20m',
+      paradasIda: '1 Parada',
+      paradasVolta: 'Direto',
+    });
+    expect(itinerario.ida.pernas.map((perna) => perna.numeroVoo))
+      .toEqual(['AD 4101', 'G3 1902']);
+    expect(entrada).toEqual(copiaAntes);
+  });
+
+  it('projeta somente ida sem criar campos da volta ou propriedades undefined', () => {
+    const itinerario = validarENormalizarItinerario({
+      versao: 1,
+      ida: {
+        tipo: 'ida',
+        pernas: [{
+          origem: 'AJU',
+          destino: 'BSB',
+          dataSaida: '2026-09-03',
+          dataChegada: '2026-09-04',
+        }],
+        paradas: '2 Paradas',
+      },
+    });
+
+    const projecao = projetarItinerarioParaCamposLegados(itinerario);
+    const valores = Object.values(projecao);
+
+    expect(projecao).toEqual({
+      tipoVoo: 'ida',
+      origem: 'AJU',
+      destino: 'BSB',
+      origemIda: 'AJU',
+      destinoIda: 'BSB',
+      dataIda: '03-09-2026',
+      paradasIda: 'Direto',
+    });
+    expect(valores).not.toContain(undefined);
+    expect(projecao).not.toHaveProperty('dataVolta');
+    expect(projecao).not.toHaveProperty('paradasVolta');
+  });
+
+  it('mantem a quantidade textual de paradas quando a fonte validada e legada', () => {
+    const itinerario = validarENormalizarItinerario({
+      versao: 1,
+      ida: {
+        tipo: 'ida',
+        fonte: 'legado',
+        pernas: [{ origem: 'GIG', destino: 'AJU' }],
+        paradas: '2 Paradas',
+      },
+    });
+
+    expect(projetarItinerarioParaCamposLegados(itinerario).paradasIda)
+      .toBe('2 Paradas');
+  });
+
+  it('usa a duracao da unica perna como fallback para voo direto', () => {
+    const itinerario = validarENormalizarItinerario({
+      versao: 1,
+      ida: {
+        tipo: 'ida',
+        pernas: [{
+          origem: 'AJU',
+          destino: 'GRU',
+          duracao: '2h 35m',
+        }],
+      },
+    });
+
+    expect(projetarItinerarioParaCamposLegados(itinerario).duracaoIda)
+      .toBe('2h 35m');
+  });
+
+  it('prioriza duracaoTotal e nao trata duracao de uma perna como total multitrecho', () => {
+    const direto = validarENormalizarItinerario({
+      versao: 1,
+      ida: {
+        tipo: 'ida',
+        duracaoTotal: '3h 00m',
+        pernas: [{ origem: 'AJU', destino: 'GRU', duracao: '2h 35m' }],
+      },
+    });
+    const multitrecho = validarENormalizarItinerario({
+      versao: 1,
+      ida: {
+        tipo: 'ida',
+        pernas: [
+          { origem: 'AJU', destino: 'GRU', duracao: '2h 35m' },
+          { origem: 'GRU', destino: 'BSB', duracao: '1h 30m' },
+        ],
+      },
+    });
+
+    expect(projetarItinerarioParaCamposLegados(direto).duracaoIda).toBe('3h 00m');
+    expect(projetarItinerarioParaCamposLegados(multitrecho))
+      .not.toHaveProperty('duracaoIda');
   });
 });
