@@ -8,6 +8,13 @@ export type {
   TrechoCotacao,
   TrechoCotacaoInput,
 } from './cotacao';
+export type {
+  ComItinerarioEmMemoria,
+  ItinerarioCotacao,
+  PernaVoo,
+  SentidoItinerario,
+  TipoSentidoItinerario,
+} from './itinerario';
 export type { Cliente, NovoCliente } from './cliente';
 export type { UsuarioPerfil } from './usuario';
 export {
