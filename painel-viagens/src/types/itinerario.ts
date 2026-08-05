@@ -30,8 +30,9 @@ export interface ItinerarioCotacao {
 }
 
 /**
- * Extensão exclusivamente em memória. O contrato persistido de Cotacao não
- * recebe itinerario neste ciclo, evitando gravação acidental no Firestore.
+ * Cotacao admite itinerario opcional, e este wrapper continua útil para
+ * composição e leitura sem mutar a cotação. A interface atual ainda não envia
+ * itinerario ao mapper; a ativação segue bloqueada até a proteção do Histórico.
  */
 export type ComItinerarioEmMemoria<T> = {
   cotacao: T;

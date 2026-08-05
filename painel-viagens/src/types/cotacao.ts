@@ -1,5 +1,6 @@
 import type { Timestamp } from 'firebase/firestore';
 import type { LeadStatus, ProdutoOfertado } from '../lib/leadUtils';
+import type { ItinerarioCotacao } from './itinerario';
 
 export type Companhia = 'Azul' | 'GOL' | 'Latam';
 
@@ -57,7 +58,12 @@ export interface Cotacao {
   horaChegadaIda?: string;
   duracaoIda?: string;
   paradasIda?: string;
+  horaSaidaVolta?: string;
+  horaChegadaVolta?: string;
+  duracaoVolta?: string;
+  paradasVolta?: string;
   dataVolta?: string | null;
+  itinerario?: ItinerarioCotacao;
   status?: StatusCotacao | string;
   produtosOfertados?: ProdutoOfertado[] | string[];
   observacao?: string;
