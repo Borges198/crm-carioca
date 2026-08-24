@@ -14,6 +14,7 @@ import BilhetePreview from '../components/BilhetePreview';
 import { useAuth } from '../context/AuthContext';
 import type { Cliente, Companhia, NovaCotacao } from '../types';
 import { extrairDadosSmartPaste } from '../utils/smartPasteUtils';
+import { resolverItinerarioPendenteSmartPaste } from '../utils/smartPasteItinerarioIntegration';
 import { mapearSmartPasteParaTrecho } from '../utils/smartPasteTrechoUtils';
 import { gerarMensagemWhatsApp } from '../utils/whatsappMessageUtils';
 import { extrairCandidatosSmartPaste, type SmartPasteCandidate, type SmartPasteCandidatesResult } from '../lib/smartPasteCandidatesUtils';
@@ -149,7 +150,10 @@ export default function Home() {
       textoOrigemPreview: text.replace(/\s+/g, ' ').trim().slice(0, 140),
     });
 
-    return extrairDadosSmartPaste(text);
+    return {
+      texto: text,
+      dadosExtraidos: extrairDadosSmartPaste(text),
+    };
   };
 
   const aplicarCandidatoSmartPaste = (candidate: SmartPasteCandidate) => {
@@ -178,8 +182,9 @@ export default function Home() {
 
   const handleSmartPaste = async () => {
     try {
-      const dadosExtraidos = await lerDadosSmartPaste();
-      if (!dadosExtraidos) return;
+      const leitura = await lerDadosSmartPaste();
+      if (!leitura) return;
+      const { texto, dadosExtraidos } = leitura;
       const tipoVooAtualizado = dadosExtraidos.tipoVoo || tipoVoo;
       const companhiaAtualizada = dadosExtraidos.companhia || companhia;
 
@@ -199,7 +204,9 @@ export default function Home() {
       if (dadosExtraidos.pontos) setPontos(dadosExtraidos.pontos);
       if (dadosExtraidos.taxaEmbarque) setTaxaEmbarque(dadosExtraidos.taxaEmbarque);
 
-      setItinerarioPendente(undefined);
+      const itinerarioExtraido = resolverItinerarioPendenteSmartPaste(texto);
+      if (itinerarioExtraido) setItinerarioPendente(itinerarioExtraido);
+      else setItinerarioPendente(undefined);
       alert("✨ Voo extraído e colado com sucesso!");
     } catch {
       alert("Não foi possível colar. Verifique a permissão da área de transferência.");
@@ -208,8 +215,9 @@ export default function Home() {
 
   const handleSmartPasteIda = async () => {
     try {
-      const dadosExtraidos = await lerDadosSmartPaste();
-      if (!dadosExtraidos) return;
+      const leitura = await lerDadosSmartPaste();
+      if (!leitura) return;
+      const { dadosExtraidos } = leitura;
       const updates = mapearSmartPasteParaTrecho('ida', dadosExtraidos);
 
       if (updates.companhiaIda) setCompanhiaIda(updates.companhiaIda);
@@ -231,8 +239,9 @@ export default function Home() {
 
   const handleSmartPasteVolta = async () => {
     try {
-      const dadosExtraidos = await lerDadosSmartPaste();
-      if (!dadosExtraidos) return;
+      const leitura = await lerDadosSmartPaste();
+      if (!leitura) return;
+      const { dadosExtraidos } = leitura;
       const updates = mapearSmartPasteParaTrecho('volta', dadosExtraidos);
 
       setTipoVoo('ida_volta');
