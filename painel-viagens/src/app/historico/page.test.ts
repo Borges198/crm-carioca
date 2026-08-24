@@ -36,7 +36,7 @@ import {
   podeEditarCotacaoCompleta,
   persistirEdicaoCotacao,
   type CamposEdicaoCotacao,
-} from './page';
+} from './historicoUtils';
 
 const cotacaoBase: Cotacao = {
   id: 'cotacao-1',
@@ -71,14 +71,14 @@ describe('edição segura do telefone no histórico', () => {
   });
 
   it('preserva o telefone formatado e normaliza somente para o campo derivado', () => {
-    expect(montarPayloadEdicaoCotacao(camposBase)).toMatchObject({
+    expect(montarPayloadEdicaoCotacao(cotacaoBase, camposBase)).toMatchObject({
       telefone: '(82) 99999-9999',
       telefoneNormalizado: '82999999999',
     });
   });
 
   it('persiste telefone vazio com normalização vazia', () => {
-    expect(montarPayloadEdicaoCotacao({ ...camposBase, telefone: '' })).toMatchObject({
+    expect(montarPayloadEdicaoCotacao(cotacaoBase, { ...camposBase, telefone: '' })).toMatchObject({
       telefone: '',
       telefoneNormalizado: '',
     });
@@ -87,7 +87,7 @@ describe('edição segura do telefone no histórico', () => {
   it('envia somente o ID selecionado e o payload completo do modal', async () => {
     const atualizar = vi.fn().mockResolvedValue(undefined);
 
-    await persistirEdicaoCotacao('cotacao-1', camposBase, atualizar);
+    await persistirEdicaoCotacao('cotacao-1', cotacaoBase, camposBase, atualizar);
 
     expect(atualizar).toHaveBeenCalledOnce();
     expect(atualizar).toHaveBeenCalledWith('cotacao-1', {
@@ -104,7 +104,7 @@ describe('edição segura do telefone no histórico', () => {
   });
 
   it('não inclui associação ou campos comerciais no payload', () => {
-    const payload = montarPayloadEdicaoCotacao(camposBase);
+    const payload = montarPayloadEdicaoCotacao(cotacaoBase, camposBase);
 
     expect(payload).not.toHaveProperty('clienteId');
     expect(payload).not.toHaveProperty('leadStatus');
@@ -118,7 +118,7 @@ describe('edição segura do telefone no histórico', () => {
       id: 'cotacao-2',
       telefone: '(82) 97777-2222',
     };
-    const payload = montarPayloadEdicaoCotacao(camposBase);
+    const payload = montarPayloadEdicaoCotacao(cotacaoBase, camposBase);
 
     const resultado = atualizarCotacaoLocalPorId(
       [cotacaoBase, homonima],
@@ -136,7 +136,7 @@ describe('edição segura do telefone no histórico', () => {
     const cotacoesAntes = [cotacaoBase];
 
     await expect(
-      persistirEdicaoCotacao('cotacao-1', camposBase, atualizar)
+      persistirEdicaoCotacao('cotacao-1', cotacaoBase, camposBase, atualizar)
     ).rejects.toThrow('sem permissão');
 
     expect(cotacoesAntes).toEqual([cotacaoBase]);

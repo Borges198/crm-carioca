@@ -23,164 +23,22 @@ import {
   type LeadStatus,
   type ProdutoOfertado,
 } from '../../lib/leadUtils';
-import {
-  converterCotacaoFechadaEmCliente,
-  normalizarTelefoneCliente,
-} from '../../utils/clienteConversionUtils';
+import { converterCotacaoFechadaEmCliente } from '../../utils/clienteConversionUtils';
 import { filterBySearch, normalizeSearchText } from '../../utils/searchUtils';
+import {
+  atualizarCotacaoLocalPorId,
+  cotacaoPossuiItinerarioProtegido,
+  criarCamposEdicaoCotacao,
+  criarSelecaoCotacao,
+  montarPayloadEdicaoComercial,
+  operacaoHistoricoPertenceASessao,
+  podeEditarCotacaoCompleta,
+  persistirEdicaoCotacao,
+  type IdentidadeSessaoHistorico,
+  type SelecaoCotacaoComSessao,
+} from './historicoUtils';
 
 type VisaoHistorico = 'minhas' | 'equipe';
-
-export interface IdentidadeSessaoHistorico {
-  userId: string | undefined;
-  geracao: number;
-  visao: VisaoHistorico;
-  agencyId?: string;
-  role?: string;
-}
-
-export interface IdentidadeOperacaoHistorico extends IdentidadeSessaoHistorico {
-  cotacaoId: string;
-  ownerId?: string;
-  operacao: 'editar' | 'comercial';
-  tipoModal: 'completo' | 'comercial';
-}
-
-export interface SelecaoCotacaoComSessao {
-  cotacao: Cotacao;
-  identidade: IdentidadeOperacaoHistorico;
-  tipoModal: 'completo' | 'comercial';
-}
-
-export function criarSelecaoCotacao(
-  cotacao: Cotacao,
-  sessao: IdentidadeSessaoHistorico,
-  tipoModal: 'completo' | 'comercial'
-): SelecaoCotacaoComSessao {
-  return {
-    cotacao,
-    tipoModal,
-    identidade: {
-      ...sessao,
-      cotacaoId: cotacao.id,
-      ownerId: cotacao.ownerId,
-      operacao: tipoModal === 'completo' ? 'editar' : 'comercial',
-      tipoModal,
-    },
-  };
-}
-
-export interface CamposEdicaoCotacao {
-  cliente: string;
-  telefone: string;
-  origem: string;
-  destino: string;
-  companhia: string;
-  valorTotal: number;
-  dataIda: string;
-}
-
-export function criarCamposEdicaoCotacao(cotacao: Cotacao): CamposEdicaoCotacao {
-  return {
-    cliente: cotacao.cliente,
-    telefone: cotacao.telefone ?? '',
-    origem: cotacao.origem,
-    destino: cotacao.destino,
-    companhia: cotacao.companhia,
-    valorTotal: cotacao.valorTotal || 0,
-    dataIda: cotacao.dataIda,
-  };
-}
-
-export function montarPayloadEdicaoCotacao(campos: CamposEdicaoCotacao) {
-  return {
-    cliente: campos.cliente,
-    telefone: campos.telefone,
-    telefoneNormalizado: normalizarTelefoneCliente(campos.telefone),
-    origem: campos.origem,
-    destino: campos.destino,
-    companhia: campos.companhia,
-    valorTotal: Number(campos.valorTotal),
-    dataIda: campos.dataIda,
-  };
-}
-
-export function atualizarCotacaoLocalPorId(
-  cotacoes: Cotacao[],
-  cotacaoId: string,
-  dadosAtualizados: ReturnType<typeof montarPayloadEdicaoCotacao>
-) {
-  return cotacoes.map((item) => (
-    item.id === cotacaoId ? { ...item, ...dadosAtualizados } : item
-  ));
-}
-
-export async function persistirEdicaoCotacao(
-  cotacaoId: string,
-  campos: CamposEdicaoCotacao,
-  atualizar: typeof atualizarCotacao = atualizarCotacao
-) {
-  const dadosAtualizados = montarPayloadEdicaoCotacao(campos);
-  await atualizar(cotacaoId, dadosAtualizados);
-  return dadosAtualizados;
-}
-
-export function podeEditarCotacaoCompleta(
-  role: string | undefined,
-  estaNaVisaoEquipe: boolean
-) {
-  return !(estaNaVisaoEquipe && role === 'supervisor');
-}
-
-export function operacaoHistoricoPertenceASessao(
-  atual: IdentidadeSessaoHistorico,
-  capturada: IdentidadeOperacaoHistorico,
-  userIdAtual: string | undefined,
-  cotacoesAtuais: Cotacao[],
-  cotacaoSelecionadaId: string | undefined,
-  role: string | undefined
-) {
-  if (
-    !userIdAtual
-    || atual.userId !== userIdAtual
-    || atual.userId !== capturada.userId
-    || atual.geracao !== capturada.geracao
-    || atual.visao !== capturada.visao
-    || atual.agencyId !== capturada.agencyId
-    || atual.role !== capturada.role
-    || cotacaoSelecionadaId !== capturada.cotacaoId
-    || capturada.tipoModal === 'completo' && capturada.operacao !== 'editar'
-    || capturada.tipoModal === 'comercial' && capturada.operacao !== 'comercial'
-  ) {
-    return false;
-  }
-
-  const cotacao = cotacoesAtuais.find((item) => item.id === capturada.cotacaoId);
-  if (!cotacao) return false;
-  if (cotacao.ownerId !== capturada.ownerId) return false;
-
-  if (atual.visao === 'equipe') {
-    return Boolean(
-      (role === 'admin' || role === 'supervisor')
-      && atual.agencyId
-      && (!cotacao.agencyId || cotacao.agencyId === atual.agencyId)
-    );
-  }
-
-  return !cotacao.ownerId || cotacao.ownerId === userIdAtual;
-}
-
-export function montarPayloadEdicaoComercial(
-  leadStatus: LeadStatus,
-  produtosOfertados: ProdutoOfertado[],
-  observacao: string
-) {
-  return {
-    leadStatus,
-    produtosOfertados,
-    observacao: observacao.trim(),
-  };
-}
 
 export default function Historico() {
   return (
@@ -391,7 +249,7 @@ function HistoricoContent() {
     }
 
     try {
-      const dadosAtualizados = await persistirEdicaoCotacao(cotacaoId, {
+      const dadosAtualizados = await persistirEdicaoCotacao(cotacaoId, selecaoOrigem.cotacao, {
         cliente: editCliente,
         telefone: editTelefone,
         origem: editOrigem,
@@ -987,6 +845,11 @@ function HistoricoContent() {
           <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md">
             <h2 className="text-2xl font-bold text-slate-800 mb-6">Editar dados da cotação</h2>
             <form onSubmit={salvarEdicao} className="flex flex-col gap-4">
+              {cotacaoPossuiItinerarioProtegido(selecaoEdicao.cotacao) && (
+                <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-800">
+                  Itinerário estruturado — rota e horários protegidos
+                </p>
+              )}
               <div>
                 <label className="text-sm font-semibold text-slate-600">Nome do cliente</label>
                 <input type="text" value={editCliente} onChange={(e) => setEditCliente(e.target.value)} className="w-full mt-1 px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" required />
@@ -998,11 +861,11 @@ function HistoricoContent() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-semibold text-slate-600">Origem</label>
-                  <input type="text" value={editOrigem} onChange={(e) => setEditOrigem(e.target.value.toUpperCase())} className="w-full mt-1 px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" required />
+                  <input type="text" value={editOrigem} onChange={(e) => setEditOrigem(e.target.value.toUpperCase())} disabled={cotacaoPossuiItinerarioProtegido(selecaoEdicao.cotacao)} className="w-full mt-1 px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500" required />
                 </div>
                 <div>
                   <label className="text-sm font-semibold text-slate-600">Destino</label>
-                  <input type="text" value={editDestino} onChange={(e) => setEditDestino(e.target.value.toUpperCase())} className="w-full mt-1 px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" required />
+                  <input type="text" value={editDestino} onChange={(e) => setEditDestino(e.target.value.toUpperCase())} disabled={cotacaoPossuiItinerarioProtegido(selecaoEdicao.cotacao)} className="w-full mt-1 px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500" required />
                 </div>
               </div>
               <div>
@@ -1020,7 +883,7 @@ function HistoricoContent() {
                 </div>
                 <div>
                   <label className="text-sm font-semibold text-slate-600">Data da ida</label>
-                  <input type="text" value={editDataIda} onChange={(e) => setEditDataIda(e.target.value)} className="w-full mt-1 px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" placeholder="DD-MM-YYYY" required />
+                  <input type="text" value={editDataIda} onChange={(e) => setEditDataIda(e.target.value)} disabled={cotacaoPossuiItinerarioProtegido(selecaoEdicao.cotacao)} className="w-full mt-1 px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500" placeholder="DD-MM-YYYY" required />
                 </div>
               </div>
               <div className="flex justify-end gap-3 mt-4">
