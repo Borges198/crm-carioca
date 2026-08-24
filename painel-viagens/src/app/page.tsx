@@ -12,15 +12,14 @@ import FormularioCotacao, {
 } from '../components/FormularioCotacao';
 import BilhetePreview from '../components/BilhetePreview';
 import { useAuth } from '../context/AuthContext';
-import { criarCotacao } from '../services/cotacoesService';
 import type { Cliente, Companhia, NovaCotacao } from '../types';
 import { extrairDadosSmartPaste } from '../utils/smartPasteUtils';
 import { mapearSmartPasteParaTrecho } from '../utils/smartPasteTrechoUtils';
-import { montarNovaCotacao } from '../utils/cotacaoMapper';
 import { gerarMensagemWhatsApp } from '../utils/whatsappMessageUtils';
 import { extrairCandidatosSmartPaste, type SmartPasteCandidate, type SmartPasteCandidatesResult } from '../lib/smartPasteCandidatesUtils';
 import type { LeadStatus, ProdutoOfertado } from '../lib/leadUtils';
 import { DEFAULT_AGENCY_ID } from '../types';
+import { submeterNovaCotacao, type ItinerarioPendente } from './cotacaoCreationFlow';
 
 interface SmartPasteConferencia extends SmartPasteCandidatesResult {
   textoOrigemPreview: string;
@@ -104,6 +103,7 @@ export default function Home() {
   const [produtosOfertados, setProdutosOfertados] = useState<ProdutoOfertado[]>([]);
   const [observacao, setObservacao] = useState('');
   const [leadStatus, setLeadStatus] = useState<LeadStatus>('novo');
+  const [itinerarioPendente, setItinerarioPendente] = useState<ItinerarioPendente>();
 
   const ticketRef = useRef<HTMLDivElement>(null);
 
@@ -199,6 +199,7 @@ export default function Home() {
       if (dadosExtraidos.pontos) setPontos(dadosExtraidos.pontos);
       if (dadosExtraidos.taxaEmbarque) setTaxaEmbarque(dadosExtraidos.taxaEmbarque);
 
+      setItinerarioPendente(undefined);
       alert("✨ Voo extraído e colado com sucesso!");
     } catch {
       alert("Não foi possível colar. Verifique a permissão da área de transferência.");
@@ -221,6 +222,7 @@ export default function Home() {
       if (updates.origem) setOrigem(updates.origem);
       if (updates.destino) setDestino(updates.destino);
 
+      setItinerarioPendente(undefined);
       alert("Dados da ida colados com sucesso!");
     } catch {
       alert("Não foi possível colar. Verifique a permissão da área de transferência.");
@@ -244,6 +246,7 @@ export default function Home() {
       if (updates.origemVolta) setOrigemVolta(updates.origemVolta);
       if (updates.destinoVolta) setDestinoVolta(updates.destinoVolta);
 
+      setItinerarioPendente(undefined);
       alert("Dados da volta colados com sucesso!");
     } catch {
       alert("Não foi possível colar. Verifique a permissão da área de transferência.");
@@ -352,38 +355,40 @@ export default function Home() {
         camposRotasPorTrecho.destinoVolta = destinoVolta;
       }
 
-      const novaCotacao: NovaCotacao = montarNovaCotacao({
-        ownerId: user.uid,
-        ownerName: user.displayName ?? undefined,
-        ownerEmail: user.email ?? undefined,
-        agencyId: accessProfile.agencyId ?? DEFAULT_AGENCY_ID,
-        clienteId: clienteSelecionado?.id,
-        cliente,
-        telefone: telefoneCotacao,
-        telefoneNormalizado,
-        origem,
-        destino,
-        companhia,
-        tipoVoo,
-        dataIda: dataIdaFormatada,
-        dataVolta: dataVoltaFormatada,
-        horaSaidaIda,
-        horaChegadaIda,
-        horaSaidaVolta,
-        horaChegadaVolta,
-        paradasIda,
-        paradasVolta,
-        qtdPontos,
-        taxaEmbarque: taxa,
-        valorTotal,
-        produtosOfertados,
-        observacao,
-        leadStatus,
-        ...camposRotasPorTrecho,
-        ...camposPorTrecho
+      await submeterNovaCotacao({
+        dadosFormulario: {
+          ownerId: user.uid,
+          ownerName: user.displayName ?? undefined,
+          ownerEmail: user.email ?? undefined,
+          agencyId: accessProfile.agencyId ?? DEFAULT_AGENCY_ID,
+          clienteId: clienteSelecionado?.id,
+          cliente,
+          telefone: telefoneCotacao,
+          telefoneNormalizado,
+          origem,
+          destino,
+          companhia,
+          tipoVoo,
+          dataIda: dataIdaFormatada,
+          dataVolta: dataVoltaFormatada,
+          horaSaidaIda,
+          horaChegadaIda,
+          horaSaidaVolta,
+          horaChegadaVolta,
+          paradasIda,
+          paradasVolta,
+          qtdPontos,
+          taxaEmbarque: taxa,
+          valorTotal,
+          produtosOfertados,
+          observacao,
+          leadStatus,
+          ...camposRotasPorTrecho,
+          ...camposPorTrecho
+        },
+        itinerarioPendente,
+        aoLimparItinerario: () => setItinerarioPendente(undefined),
       });
-
-      await criarCotacao(novaCotacao);
       
       const textoMensagem = gerarMensagemWhatsApp({ cliente, valorTotal });
       setMensagemWhatsapp(textoMensagem);
