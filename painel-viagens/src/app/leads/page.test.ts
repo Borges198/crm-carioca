@@ -26,10 +26,17 @@ vi.mock('../../services/cotacoesService', () => ({
   listarCotacoesDoUsuario: vi.fn(),
 }));
 
+vi.mock('../../services/acompanhamentosService', () => ({
+  atualizarProximaAcao: vi.fn(),
+  listarAcompanhamentosDoUsuario: vi.fn(),
+  materializarAcompanhamento: vi.fn(),
+}));
+
 import {
   avancarIdentidadeSessaoLeads,
   agruparCotacoesEmOportunidades,
   atualizarTelefoneCotacaoPorId,
+  obterCotacoesDaCartela,
   identidadeSessaoLeadsCorresponde,
   montarCamposPesquisaOportunidade,
   montarChaveOportunidade,
@@ -210,6 +217,82 @@ describe('agrupamento de oportunidades em leads', () => {
 
     expect(oportunidades).toHaveLength(1);
     expect(oportunidades[0].cotacoes).toHaveLength(2);
+  });
+
+  it('prioriza acompanhamentoId sobre clienteId, telefone e nome', () => {
+    const oportunidades = agruparCotacoesEmOportunidades([
+      criarCotacao('1', {
+        acompanhamentoId: 'acompanhamento-1',
+        clienteId: 'cliente-1',
+      }),
+      criarCotacao('2', {
+        acompanhamentoId: 'acompanhamento-1',
+        clienteId: 'cliente-2',
+        cliente: 'Outro nome',
+        telefoneNormalizado: '11111111111',
+      }),
+    ]);
+
+    expect(oportunidades).toHaveLength(1);
+    expect(oportunidades[0].id).toContain('acompanhamento:acompanhamento-1');
+  });
+
+  it('separa oportunidades persistentes diferentes da mesma pessoa', () => {
+    const oportunidades = agruparCotacoesEmOportunidades([
+      criarCotacao('1', {
+        acompanhamentoId: 'acompanhamento-1',
+        clienteId: 'cliente-1',
+      }),
+      criarCotacao('2', {
+        acompanhamentoId: 'acompanhamento-2',
+        clienteId: 'cliente-1',
+      }),
+      criarCotacao('3', { clienteId: 'cliente-1' }),
+    ]);
+
+    expect(oportunidades).toHaveLength(3);
+  });
+
+  it('troca de representante ou subconjunto filtrado não muda a identidade persistente', () => {
+    const antiga = criarCotacao('antiga', {
+      acompanhamentoId: 'acompanhamento-1',
+      dataRegistro: '2026-06-01',
+    });
+    const recente = criarCotacao('recente', {
+      acompanhamentoId: 'acompanhamento-1',
+      dataRegistro: '2026-07-01',
+    });
+
+    expect(montarChaveOportunidade(antiga)).toBe(montarChaveOportunidade(recente));
+    expect(agruparCotacoesEmOportunidades([antiga])[0].id).toBe(
+      agruparCotacoesEmOportunidades([recente])[0].id
+    );
+  });
+
+  it('materialização usa somente as cotações visíveis na cartela filtrada', () => {
+    const aguardandoA = criarCotacao('a', {
+      clienteId: 'cliente-1',
+      leadStatus: 'aguardando_cliente',
+    });
+    const aguardandoB = criarCotacao('b', {
+      clienteId: 'cliente-1',
+      leadStatus: 'aguardando_cliente',
+    });
+    const fechadaOculta = criarCotacao('c', {
+      clienteId: 'cliente-1',
+      leadStatus: 'fechado',
+    });
+    const cotacoesGlobais = [aguardandoA, aguardandoB, fechadaOculta];
+    const cotacoesVisiveis = cotacoesGlobais.filter(
+      (cotacao) => cotacao.leadStatus === 'aguardando_cliente'
+    );
+    const oportunidadeVisivel = agruparCotacoesEmOportunidades(cotacoesVisiveis)[0];
+
+    const cotacoesParaMaterializar = obterCotacoesDaCartela(oportunidadeVisivel);
+
+    expect(cotacoesParaMaterializar.map((cotacao) => cotacao.id)).toEqual(['a', 'b']);
+    expect(cotacoesParaMaterializar).not.toBe(oportunidadeVisivel.cotacoes);
+    expect(cotacoesParaMaterializar).not.toContain(fechadaOculta);
   });
 });
 
@@ -457,6 +540,22 @@ describe('edição segura de telefone em leads', () => {
 });
 
 describe('reagrupamento após edição', () => {
+  it('editar telefone preserva acompanhamentoId e a identidade materializada', () => {
+    const vinculada = criarCotacao('1', {
+      acompanhamentoId: 'acompanhamento-1',
+    });
+    const [atualizada] = atualizarTelefoneCotacaoPorId(
+      [vinculada],
+      '1',
+      '(82) 97777-3333'
+    );
+
+    expect(atualizada.acompanhamentoId).toBe('acompanhamento-1');
+    expect(montarChaveOportunidade(atualizada)).toBe(
+      montarChaveOportunidade(vinculada)
+    );
+  });
+
   it('divide um grupo sem alterar a quantidade total de cotações', () => {
     const cotacoes = [criarCotacao('1'), criarCotacao('2')];
     const atualizadas = atualizarTelefoneCotacaoPorId(cotacoes, '1', '82977773333');
