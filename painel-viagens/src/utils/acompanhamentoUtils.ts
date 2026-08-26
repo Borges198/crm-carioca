@@ -81,6 +81,30 @@ export function formatarDataComercial(data: Timestamp | null) {
   return `${dia}/${mes}/${ano}`;
 }
 
+export type ClassificacaoProximaAcao =
+  | 'NÃO DEFINIDA'
+  | 'ATRASADA'
+  | 'HOJE'
+  | 'PRÓXIMA';
+
+function obterDiaUtc(data: Date) {
+  return Date.UTC(data.getUTCFullYear(), data.getUTCMonth(), data.getUTCDate());
+}
+
+export function classificarProximaAcao(
+  proximaAcaoEm: Timestamp | null,
+  hoje = new Date()
+): ClassificacaoProximaAcao {
+  if (!proximaAcaoEm) return 'NÃO DEFINIDA';
+
+  const diaProximaAcao = obterDiaUtc(proximaAcaoEm.toDate());
+  const diaHoje = obterDiaUtc(hoje);
+
+  if (diaProximaAcao < diaHoje) return 'ATRASADA';
+  if (diaProximaAcao === diaHoje) return 'HOJE';
+  return 'PRÓXIMA';
+}
+
 export function vincularCotacoesLocalmente(
   cotacoes: Cotacao[],
   cotacaoIds: string[],

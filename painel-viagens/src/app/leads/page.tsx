@@ -29,15 +29,24 @@ import {
 import { filterBySearch, normalizeSearchText } from '../../utils/searchUtils';
 import {
   atualizarAcompanhamentoLocalmente,
+  classificarProximaAcao,
   formatarDataComercial,
   formatarDataComercialParaInput,
   normalizarDataComercialParaTimestamp,
   vincularCotacoesLocalmente,
+  type ClassificacaoProximaAcao,
 } from '../../utils/acompanhamentoUtils';
 import { persistirProximaAcaoCartela } from '../../utils/acompanhamentoIntegration';
 
 type FiltroStatus = 'abertos' | 'sem_status' | LeadStatus;
 export const TEXTO_ORIENTATIVO_LEADS_LEITURA_COMERCIAL = 'Leads é uma visão de acompanhamento por cliente. Para alterar status, produtos ou observações de uma cotação, use o Histórico.';
+
+const CLASSIFICACAO_PROXIMA_ACAO_CLASSES: Record<ClassificacaoProximaAcao, string> = {
+  'NÃO DEFINIDA': 'border-slate-200 bg-slate-100 text-slate-600',
+  ATRASADA: 'border-red-200 bg-red-100 text-red-700',
+  HOJE: 'border-amber-300 bg-amber-100 text-amber-800',
+  'PRÓXIMA': 'border-blue-200 bg-blue-100 text-blue-700',
+};
 
 type CotacaoComHorariosVolta = Cotacao & {
   horaSaidaVolta?: string;
@@ -999,10 +1008,20 @@ function LeadsContent() {
                     acompanhamentos
                   );
                   const vinculoIndisponivel = Boolean(acompanhamentoId && !acompanhamento);
+                  const classificacaoProximaAcao = vinculoIndisponivel
+                    ? null
+                    : classificarProximaAcao(acompanhamento?.proximaAcaoEm ?? null);
 
                   return (
                     <section className="mt-4 rounded-lg border border-amber-100 bg-amber-50 p-3">
-                      <p className="text-[10px] font-black uppercase text-amber-700">Próxima ação</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-[10px] font-black uppercase text-amber-700">Próxima ação</p>
+                        {classificacaoProximaAcao && (
+                          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-black uppercase ${CLASSIFICACAO_PROXIMA_ACAO_CLASSES[classificacaoProximaAcao]}`}>
+                            {classificacaoProximaAcao}
+                          </span>
+                        )}
+                      </div>
                       <p className="mt-1 text-sm font-black text-slate-800">
                         {vinculoIndisponivel
                           ? 'Acompanhamento indisponível'

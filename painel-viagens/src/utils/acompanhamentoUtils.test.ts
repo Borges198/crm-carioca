@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Acompanhamento, Cotacao } from '../types';
 import {
+  classificarProximaAcao,
   formatarDataComercial,
   formatarDataComercialParaInput,
   montarAcompanhamentoId,
@@ -108,5 +109,33 @@ describe('identidade persistente do acompanhamento', () => {
     };
     expect(acompanhamento).not.toHaveProperty('status');
     expect(acompanhamento).not.toHaveProperty('tipoAcao');
+  });
+});
+
+describe('classificação da próxima ação', () => {
+  const hoje = new Date('2026-08-28T18:30:00.000Z');
+
+  it.each([
+    ['2026-08-27', 'ATRASADA'],
+    ['2026-08-28', 'HOJE'],
+    ['2026-08-29', 'PRÓXIMA'],
+  ] as const)('classifica %s como %s', (data, classificacao) => {
+    expect(classificarProximaAcao(
+      normalizarDataComercialParaTimestamp(data),
+      hoje
+    )).toBe(classificacao);
+  });
+
+  it('classifica data ausente como NÃO DEFINIDA', () => {
+    expect(classificarProximaAcao(null, hoje)).toBe('NÃO DEFINIDA');
+  });
+
+  it('usa o dia UTC mesmo quando a referência possui outro timezone', () => {
+    const referenciaComFuso = new Date('2026-08-28T00:30:00+14:00');
+
+    expect(classificarProximaAcao(
+      normalizarDataComercialParaTimestamp('2026-08-27'),
+      referenciaComFuso
+    )).toBe('HOJE');
   });
 });
