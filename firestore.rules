@@ -232,7 +232,10 @@ service cloud.firestore {
 
     match /acompanhamentos/{acompanhamentoId} {
       allow create: if isValidAcompanhamentoCreate(acompanhamentoId);
-      allow read: if isApproved() && isOwner();
+      allow get: if isApproved() && (!exists(
+          /databases/$(database)/documents/acompanhamentos/$(acompanhamentoId)
+        ) || isOwner());
+      allow list: if isApproved() && isOwner();
       allow update: if isApproved()
         && isOwner()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
