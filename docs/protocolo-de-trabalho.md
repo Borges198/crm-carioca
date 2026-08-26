@@ -78,6 +78,27 @@ Nunca alterar, criar com valores reais ou commitar:
 
 Quando for necessario documentar variaveis, usar exemplos sem valores reais.
 
+## Regra de projeto Firebase
+
+Branch Git, `.env.local` e Firebase CLI sao configuracoes independentes. No
+CRM Voo Singular:
+
+```text
+Frontend local DEV:    crm-carioca-dev
+Firebase de producao:  crm-carioca
+Firebase CLI default:  crm-carioca
+```
+
+Todo comando Firebase destinado ao DEV e dependente de projeto deve conter:
+
+```bash
+--project crm-carioca-dev
+```
+
+Nunca copiar para um ciclo DEV um comando historico de deploy sem acrescentar
+o projeto explicito. Antes de qualquer operacao mutavel, confirmar projeto,
+branch, diff e escopo do deploy. Branch Git nao seleciona projeto Firebase.
+
 ## Regra de lint e build
 
 Quando houver alteracao de codigo da aplicacao:

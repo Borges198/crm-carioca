@@ -123,9 +123,32 @@ republicou Rules. Mudancas futuras ainda devem considerar documentos antigos.
 
 ## Observacao sobre indices Firestore
 
-Consultas com `ownerId` e `orderBy` podem exigir indices compostos no Firestore.
+O ambiente local usa o Firebase DEV `crm-carioca-dev`, enquanto a Firebase
+CLI mantem `crm-carioca` (producao) como projeto default na `.firebaserc`.
+Branch Git nao seleciona projeto Firebase.
 
-Se o console do navegador ou o Firebase retornar um erro com link para criar indice, revise e crie o indice no Firebase Console antes de considerar isso um erro de codigo.
+Todo comando Firebase destinado ao DEV deve informar explicitamente:
+
+```bash
+--project crm-carioca-dev
+```
+
+Por exemplo:
+
+```bash
+firebase firestore:indexes --project crm-carioca-dev
+```
+
+Os tres indices compostos existentes no DEV estao versionados em
+`firestore.indexes.json` e referenciados por `firebase.json` na branch
+`firebase-dev-recovery`, commit `0b560ec835f0491193a068f60bef83c72bb96ca6`.
+
+Se surgir necessidade de outro indice, primeiro confirme o projeto e a query.
+Nao crie nem publique indice especulativo e nunca use deploy do DEV sem
+`--project crm-carioca-dev`.
+
+O checkpoint consolidado esta em
+`docs/checkpoint-firebase-dev-recovery.md`.
 
 ## Seguranca
 

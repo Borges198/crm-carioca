@@ -20,6 +20,10 @@ Registrar decisoes tecnicas e operacionais do CRM Voo Singular para preservar co
 - Separar `/historico`, `/leads` e `/clientes` como areas com responsabilidades diferentes.
 - Tratar `/clientes` como carteira de compradores reais, nao como lista geral de leads.
 - Tratar o banho de loja inicial como polimento de UX e responsividade, sem mudanca de modelo de dados ou regra de negocio.
+- Separar configuracao do frontend, projeto default da Firebase CLI e branch
+  Git: nenhuma dessas dimensoes seleciona automaticamente as demais.
+- Exigir `--project crm-carioca-dev` em todo comando Firebase destinado ao
+  DEV.
 
 ## Motivo de usar ownerId
 
@@ -38,6 +42,23 @@ O `ownerId` deve continuar sendo gravado em toda nova cotacao e todo novo client
 A visao de equipe nao elimina ownership: supervisor e admin podem receber
 leitura ou mutacoes limitadas conforme `agencyId`, perfil, visao ativa, pagina
 e Firestore Rules.
+
+## Decisao de isolamento operacional do Firebase DEV
+
+O frontend local usa `crm-carioca-dev`. Producao usa `crm-carioca`, que
+permanece como default da Firebase CLI na `.firebaserc`.
+
+Decisoes:
+
+- nao alterar o default como mecanismo de seguranca temporario;
+- informar `--project crm-carioca-dev` em toda operacao Firebase do DEV;
+- nao presumir projeto Firebase pela branch Git;
+- manter mudancas de infraestrutura em branch separada das fases de produto;
+- preservar indices existentes em `firestore.indexes.json`, sem adicionar
+  indices especulativos.
+
+O checkpoint detalhado dessa recuperacao esta em
+`docs/checkpoint-firebase-dev-recovery.md`.
 
 ## Motivo de manter BilhetePreview sem valores
 

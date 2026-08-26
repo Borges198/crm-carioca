@@ -1,5 +1,9 @@
 # Checkpoint de controle de acesso
 
+> **Aviso operacional:** este checkpoint preserva o historico de uma
+> publicacao em `crm-carioca` (producao). Nao reutilize o comando abaixo para
+> o DEV sem acrescentar `--project crm-carioca-dev`.
+
 Data do checkpoint: 2026-06-05
 
 Branch: `crm-cotacao`

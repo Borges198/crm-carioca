@@ -1,5 +1,10 @@
 # Checklist pre-merge - Acesso por perfil e agencia
 
+> **Aviso operacional:** este documento registra uma fase historica em
+> `crm-carioca` (producao). Os comandos abaixo sem `--project` nao sao modelo
+> para o Firebase DEV. Toda operacao destinada ao DEV deve usar explicitamente
+> `--project crm-carioca-dev`.
+
 ## Estado esperado
 
 - Branch atual: `crm-cotacao`.
