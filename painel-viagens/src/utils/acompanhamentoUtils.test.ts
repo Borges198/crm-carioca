@@ -7,6 +7,7 @@ import {
   montarAcompanhamentoId,
   normalizarDataComercialParaTimestamp,
   obterClienteIdConsistente,
+  ordenarPorProximaAcao,
   selecionarCotacaoAncoraId,
   vincularCotacoesLocalmente,
 } from './acompanhamentoUtils';
@@ -137,5 +138,78 @@ describe('classificação da próxima ação', () => {
       normalizarDataComercialParaTimestamp('2026-08-27'),
       referenciaComFuso
     )).toBe('HOJE');
+  });
+});
+
+describe('ordenação pela próxima ação', () => {
+  const hoje = new Date('2026-08-28T18:30:00.000Z');
+  const criarItem = (id: string, data: string | null) => ({
+    id,
+    proximaAcaoEm: data ? normalizarDataComercialParaTimestamp(data) : null,
+  });
+  const ordenar = (itens: ReturnType<typeof criarItem>[]) => ordenarPorProximaAcao(
+    itens,
+    (item) => item.proximaAcaoEm,
+    hoje
+  );
+
+  it('coloca atrasada antes de hoje', () => {
+    expect(ordenar([
+      criarItem('hoje', '2026-08-28'),
+      criarItem('atrasada', '2026-08-27'),
+    ]).map((item) => item.id)).toEqual(['atrasada', 'hoje']);
+  });
+
+  it('coloca hoje antes de futura', () => {
+    expect(ordenar([
+      criarItem('futura', '2026-08-29'),
+      criarItem('hoje', '2026-08-28'),
+    ]).map((item) => item.id)).toEqual(['hoje', 'futura']);
+  });
+
+  it('coloca futura antes de sem data', () => {
+    expect(ordenar([
+      criarItem('sem-data', null),
+      criarItem('futura', '2026-08-29'),
+    ]).map((item) => item.id)).toEqual(['futura', 'sem-data']);
+  });
+
+  it('ordena duas futuras pela mais próxima primeiro', () => {
+    expect(ordenar([
+      criarItem('mais-distante', '2026-09-10'),
+      criarItem('mais-proxima', '2026-08-29'),
+    ]).map((item) => item.id)).toEqual(['mais-proxima', 'mais-distante']);
+  });
+
+  it('ordena duas atrasadas pela mais antiga primeiro', () => {
+    expect(ordenar([
+      criarItem('mais-recente', '2026-08-27'),
+      criarItem('mais-antiga', '2026-08-20'),
+    ]).map((item) => item.id)).toEqual(['mais-antiga', 'mais-recente']);
+  });
+
+  it('preserva a ordem relativa dos itens sem data', () => {
+    const primeiro = criarItem('primeiro', null);
+    const segundo = criarItem('segundo', null);
+
+    expect(ordenar([primeiro, segundo])).toEqual([primeiro, segundo]);
+  });
+
+  it('preserva a ordem relativa dos itens de hoje', () => {
+    const primeiro = criarItem('primeiro', '2026-08-28');
+    const segundo = criarItem('segundo', '2026-08-28');
+
+    expect(ordenar([primeiro, segundo])).toEqual([primeiro, segundo]);
+  });
+
+  it('não altera a lista original', () => {
+    const itens = [
+      criarItem('sem-data', null),
+      criarItem('atrasada', '2026-08-27'),
+    ];
+
+    ordenar(itens);
+
+    expect(itens.map((item) => item.id)).toEqual(['sem-data', 'atrasada']);
   });
 });

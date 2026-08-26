@@ -87,6 +87,13 @@ export type ClassificacaoProximaAcao =
   | 'HOJE'
   | 'PRÓXIMA';
 
+const PRIORIDADE_PROXIMA_ACAO: Record<ClassificacaoProximaAcao, number> = {
+  ATRASADA: 0,
+  HOJE: 1,
+  'PRÓXIMA': 2,
+  'NÃO DEFINIDA': 3,
+};
+
 function obterDiaUtc(data: Date) {
   return Date.UTC(data.getUTCFullYear(), data.getUTCMonth(), data.getUTCDate());
 }
@@ -103,6 +110,36 @@ export function classificarProximaAcao(
   if (diaProximaAcao < diaHoje) return 'ATRASADA';
   if (diaProximaAcao === diaHoje) return 'HOJE';
   return 'PRÓXIMA';
+}
+
+export function ordenarPorProximaAcao<T>(
+  itens: T[],
+  obterProximaAcaoEm: (item: T) => Timestamp | null,
+  hoje = new Date()
+) {
+  return itens
+    .map((item, indiceOriginal) => ({ item, indiceOriginal }))
+    .sort((a, b) => {
+      const dataA = obterProximaAcaoEm(a.item);
+      const dataB = obterProximaAcaoEm(b.item);
+      const classificacaoA = classificarProximaAcao(dataA, hoje);
+      const classificacaoB = classificarProximaAcao(dataB, hoje);
+      const diferencaPrioridade = PRIORIDADE_PROXIMA_ACAO[classificacaoA]
+        - PRIORIDADE_PROXIMA_ACAO[classificacaoB];
+
+      if (diferencaPrioridade !== 0) return diferencaPrioridade;
+
+      if (
+        classificacaoA === 'ATRASADA'
+        || classificacaoA === 'PRÓXIMA'
+      ) {
+        const diferencaData = obterDiaUtc(dataA!.toDate()) - obterDiaUtc(dataB!.toDate());
+        if (diferencaData !== 0) return diferencaData;
+      }
+
+      return a.indiceOriginal - b.indiceOriginal;
+    })
+    .map(({ item }) => item);
 }
 
 export function vincularCotacoesLocalmente(

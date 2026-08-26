@@ -33,6 +33,7 @@ import {
   formatarDataComercial,
   formatarDataComercialParaInput,
   normalizarDataComercialParaTimestamp,
+  ordenarPorProximaAcao,
   vincularCotacoesLocalmente,
   type ClassificacaoProximaAcao,
 } from '../../utils/acompanhamentoUtils';
@@ -566,6 +567,14 @@ function LeadsContent() {
     filterBySearch(oportunidades, termoPesquisa, montarCamposPesquisaOportunidade)
   ), [oportunidades, termoPesquisa]);
 
+  const oportunidadesOrdenadas = useMemo(() => ordenarPorProximaAcao(
+    oportunidadesPesquisadas,
+    (oportunidade) => obterAcompanhamentoDaOportunidade(
+      oportunidade,
+      acompanhamentos
+    )?.proximaAcaoEm ?? null
+  ), [acompanhamentos, oportunidadesPesquisadas]);
+
   const totalAbertos = cotacoes.filter((cotacao) => isLeadStatusAberto(cotacao.leadStatus)).length;
   const totalPerdidos = cotacoes.filter((cotacao) => cotacao.leadStatus === 'perdido').length;
   const totalFechados = cotacoes.filter((cotacao) => cotacao.leadStatus === 'fechado').length;
@@ -955,7 +964,7 @@ function LeadsContent() {
           />
         ) : (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {oportunidadesPesquisadas.map((oportunidade) => (
+            {oportunidadesOrdenadas.map((oportunidade) => (
               <article key={oportunidade.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
