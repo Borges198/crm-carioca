@@ -4,6 +4,8 @@ export interface SmartPasteResultado {
   tipoVoo?: string;
   origem?: string;
   destino?: string;
+  origemVolta?: string;
+  destinoVolta?: string;
   horaSaidaIda?: string;
   horaChegadaIda?: string;
   horaSaidaVolta?: string;
@@ -40,7 +42,9 @@ export function extrairDadosSmartPaste(texto: string): SmartPasteResultado {
     resultado.horaChegadaIda = matches[1].hora;
     resultado.destino = matches[1].aeroporto;
     resultado.horaSaidaVolta = matches[2].hora;
+    resultado.origemVolta = matches[2].aeroporto;
     resultado.horaChegadaVolta = matches[3].hora;
+    resultado.destinoVolta = matches[3].aeroporto;
   } else if (matches.length >= 2) {
     resultado.tipoVoo = 'ida';
     resultado.horaSaidaIda = matches[0].hora;

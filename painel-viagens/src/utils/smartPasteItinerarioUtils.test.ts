@@ -727,4 +727,52 @@ describe('Smart Paste 2.0 - parser estrutural isolado', () => {
 
     expect(resultado).toMatchObject({ ok: false, codigo: 'inconsistencia_estrutural' });
   });
+
+  it('58. trata Ida e volta como tipo de viagem diante dos marcadores LATAM específicos', () => {
+    const texto = readFileSync(
+      new URL(
+        '../../tests/fixtures/smart-paste/latam/operacional-salvador-ida-volta.txt',
+        import.meta.url
+      ),
+      'utf8'
+    );
+    const resultado = extrairItinerarioSmartPaste(texto);
+    const itinerario = obterItinerario(resultado);
+
+    expect(resultado).toMatchObject({ ok: true });
+    expect(itinerario.ida.pernas).toHaveLength(1);
+    expect(itinerario.ida.pernas[0]).toMatchObject({
+      origem: 'GRU',
+      destino: 'SSA',
+      companhia: 'LATAM Airlines Brasil',
+      dataSaida: '2026-09-11',
+      dataChegada: '2026-09-11',
+      horaSaida: '09:50',
+      horaChegada: '12:10',
+    });
+    expect(itinerario.volta?.pernas).toHaveLength(1);
+    expect(itinerario.volta?.pernas[0]).toMatchObject({
+      origem: 'SSA',
+      destino: 'GRU',
+      companhia: 'LATAM Airlines Brasil',
+      dataSaida: '2026-09-14',
+      dataChegada: '2026-09-14',
+      horaSaida: '18:35',
+      horaChegada: '21:05',
+    });
+  });
+
+  it('59. preserva o marcador genérico quando não há ida e volta específicas posteriores', () => {
+    const itinerario = obterItinerario(extrairItinerarioSmartPaste([
+      'Ida e volta',
+      '01/09/2026 08:00 GIG',
+      '01/09/2026 10:00 SSA',
+    ].join('\n')));
+
+    expect(itinerario.ida.pernas[0]).toMatchObject({
+      origem: 'GIG',
+      destino: 'SSA',
+    });
+    expect(itinerario.volta).toBeUndefined();
+  });
 });

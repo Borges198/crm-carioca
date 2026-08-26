@@ -9,6 +9,11 @@ import { criarCotacao } from '../services/cotacoesService';
 import type { NovaCotacao } from '../types';
 import { montarNovaCotacao } from '../utils/cotacaoMapper';
 import {
+  confirmarRevisaoItinerario,
+  criarRevisaoItinerario,
+  obterItinerarioConfirmado,
+} from '../utils/revisaoItinerarioUtils';
+import {
   submeterNovaCotacao,
   type DadosFormularioCotacao,
   type ItinerarioPendente,
@@ -422,7 +427,7 @@ describe('fluxo real de criação com itinerário opcional', () => {
       'const aplicarCandidatoSmartPaste'
     );
 
-    expect(leituraEParse).not.toContain('setItinerarioPendente(undefined)');
+    expect(leituraEParse).not.toContain('setRevisaoItinerario');
     expect(leituraEParse.indexOf('return null'))
       .toBeLessThan(leituraEParse.indexOf('extrairDadosSmartPaste(text)'));
   });
@@ -433,6 +438,7 @@ describe('fluxo real de criação com itinerário opcional', () => {
       'const handleSmartPaste =',
       'const handleSmartPasteIda =',
       'if (dadosExtraidos.taxaEmbarque) setTaxaEmbarque',
+      'setRevisaoItinerario(criarRevisaoItinerario(itinerarioExtraido))',
       '✨ Voo extraído e colado com sucesso!',
     ],
     [
@@ -440,6 +446,7 @@ describe('fluxo real de criação com itinerário opcional', () => {
       'const handleSmartPasteIda =',
       'const handleSmartPasteVolta =',
       'if (updates.destino) setDestino',
+      'setRevisaoItinerario(descartarRevisaoItinerario())',
       'Dados da ida colados com sucesso!',
     ],
     [
@@ -447,20 +454,52 @@ describe('fluxo real de criação com itinerário opcional', () => {
       'const handleSmartPasteVolta =',
       'const gerarCotacao =',
       'if (updates.destinoVolta) setDestinoVolta',
+      'setRevisaoItinerario(descartarRevisaoItinerario())',
       'Dados da volta colados com sucesso!',
     ],
   ])('22. limpa somente depois da aplicação bem-sucedida no Smart Paste %s', (
-    _, inicio, fim, ultimaAplicacao, mensagemSucesso
+    _, inicio, fim, ultimaAplicacao, transicaoRevisao, mensagemSucesso
   ) => {
     const handler = trechoDaPagina(inicio, fim);
     const indiceAplicacao = handler.indexOf(ultimaAplicacao);
-    const indiceLimpeza = handler.indexOf('setItinerarioPendente(undefined)');
+    const indiceRevisao = handler.indexOf(transicaoRevisao);
     const indiceSucesso = handler.indexOf(mensagemSucesso);
 
     expect(indiceAplicacao).toBeGreaterThan(-1);
-    expect(indiceLimpeza).toBeGreaterThan(indiceAplicacao);
-    expect(indiceSucesso).toBeGreaterThan(indiceLimpeza);
+    expect(indiceRevisao).toBeGreaterThan(indiceAplicacao);
+    expect(indiceSucesso).toBeGreaterThan(indiceRevisao);
     expect(handler.slice(handler.indexOf('catch {')))
-      .not.toContain('setItinerarioPendente(undefined)');
+      .not.toContain('setRevisaoItinerario');
+  });
+
+  it('23. salva como legado quando a revisão ainda não foi confirmada', async () => {
+    const revisao = criarRevisaoItinerario(itinerarioIdaEVolta);
+
+    const cotacao = await submeterNovaCotacao({
+      dadosFormulario,
+      itinerarioPendente: obterItinerarioConfirmado(revisao),
+    }, dependencias());
+
+    expect(cotacao).not.toHaveProperty('itinerario');
+    expect(criarMock).toHaveBeenCalledOnce();
+  });
+
+  it('24. salva uma vez a estrutura confirmada e limpa somente após sucesso', async () => {
+    const revisao = confirmarRevisaoItinerario(
+      criarRevisaoItinerario(itinerarioIdaEVolta)
+    );
+    const aoLimparItinerario = vi.fn();
+
+    const cotacao = await submeterNovaCotacao({
+      dadosFormulario,
+      itinerarioPendente: obterItinerarioConfirmado(revisao),
+      aoLimparItinerario,
+    }, dependencias());
+
+    expect(cotacao).toHaveProperty('itinerario');
+    expect(criarMock).toHaveBeenCalledOnce();
+    expect(aoLimparItinerario).toHaveBeenCalledOnce();
+    expect(criarMock.mock.invocationCallOrder[0])
+      .toBeLessThan(aoLimparItinerario.mock.invocationCallOrder[0]);
   });
 });

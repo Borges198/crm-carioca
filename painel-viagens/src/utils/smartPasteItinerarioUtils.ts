@@ -25,6 +25,12 @@ interface SecaoTexto {
   linhas: string[];
 }
 
+interface MarcadorSecao {
+  indice: number;
+  tipo: TipoSentido;
+  tipoViagemIdaEVolta: boolean;
+}
+
 interface EventoVoo {
   aeroporto: string;
   hora: string;
@@ -118,18 +124,38 @@ function normalizarHora(hora: string) {
   return `${match[1].padStart(2, '0')}:${match[2]}`;
 }
 
-function detectarTipoSecao(linha: string): TipoSentido | undefined {
+function detectarMarcadorSecao(linha: string): Omit<MarcadorSecao, 'indice'> | undefined {
   const normalizada = removerAcentos(linha).trim().toLowerCase();
+  if (/^ida\s+e\s+volta(?:\s|$)/.test(normalizada)) {
+    return { tipo: 'ida', tipoViagemIdaEVolta: true };
+  }
   const contextual = normalizada.match(/^(?:passagem|voo)\s+de\s+(ida|volta)\b/);
-  if (contextual) return contextual[1] as TipoSentido;
+  if (contextual) {
+    return {
+      tipo: contextual[1] as TipoSentido,
+      tipoViagemIdaEVolta: false,
+    };
+  }
   const titulo = normalizada.match(/^(?:trecho\s+de\s+)?(ida|volta)\b/);
-  return titulo?.[1] as TipoSentido | undefined;
+  return titulo
+    ? { tipo: titulo[1] as TipoSentido, tipoViagemIdaEVolta: false }
+    : undefined;
 }
 
 function segmentarTexto(linhas: string[]) {
-  const marcadores = linhas.flatMap((linha, indice) => {
-    const tipo = detectarTipoSecao(linha);
-    return tipo ? [{ indice, tipo }] : [];
+  const marcadoresEncontrados = linhas.flatMap((linha, indice): MarcadorSecao[] => {
+    const marcador = detectarMarcadorSecao(linha);
+    return marcador ? [{ indice, ...marcador }] : [];
+  });
+  const marcadores = marcadoresEncontrados.filter((marcador) => {
+    if (!marcador.tipoViagemIdaEVolta) return true;
+    const posteriores = marcadoresEncontrados.filter(
+      (outro) => !outro.tipoViagemIdaEVolta && outro.indice > marcador.indice
+    );
+    return !(
+      posteriores.some((outro) => outro.tipo === 'ida')
+      && posteriores.some((outro) => outro.tipo === 'volta')
+    );
   });
 
   if (marcadores.length === 0) {
@@ -390,15 +416,21 @@ function extrairQuantidadeConexoes(texto: string) {
 
 function extrairCompanhiaDaSecao(texto: string) {
   const linhas = texto.split('\n').map((linha) => linha.trim()).filter(Boolean);
+  let companhiaExplicita: string | undefined;
   for (let indice = 0; indice < linhas.length; indice += 1) {
     const explicita = extrairValorCompanhiaExplicita(linhas[indice]);
-    if (explicita) return ehCompanhiaOperacionalReconhecivel(explicita);
+    if (explicita) {
+      companhiaExplicita ??= ehCompanhiaOperacionalReconhecivel(explicita);
+      continue;
+    }
     if (/^(?:companhia(?:\s+a[eé]rea)?|operado\s+por|operado\s+pela)\s*:?$/i
       .test(linhas[indice])) {
       return ehCompanhiaOperacionalReconhecivel(linhas[indice + 1]);
     }
+    const companhiaIsolada = ehCompanhiaOperacionalReconhecivel(linhas[indice]);
+    if (companhiaIsolada) return companhiaIsolada;
   }
-  return undefined;
+  return companhiaExplicita;
 }
 
 function montarSentido(secao: SecaoTexto): FalhaSmartPasteEstruturado | {

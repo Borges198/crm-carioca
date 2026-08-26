@@ -109,6 +109,8 @@ describe('extrairDadosSmartPaste com fixtures reais', () => {
       tipoVoo: 'ida_volta',
       origem: 'GRU',
       destino: 'AJU',
+      origemVolta: 'AJU',
+      destinoVolta: 'GRU',
       dataIda: '2026-07-07',
       dataVolta: '2026-07-18',
       horaSaidaIda: '07:15',
@@ -145,7 +147,7 @@ describe('extrairDadosSmartPaste com fixtures reais', () => {
     });
   });
 
-  it('documenta lacuna atual: Smart Paste nao separa aeroportos diferentes no retorno', () => {
+  it('separa explicitamente os aeroportos da volta em texto global com quatro eventos', () => {
     const result = extrairDadosSmartPaste(`
       LATAM
       28/07/2026
@@ -161,13 +163,15 @@ describe('extrairDadosSmartPaste com fixtures reais', () => {
       tipoVoo: 'ida_volta',
       origem: 'GIG',
       destino: 'NVT',
+      origemVolta: 'NVT',
+      destinoVolta: 'SDU',
       horaSaidaVolta: '18:00',
       horaChegadaVolta: '20:00',
     });
     expect(payload.origemIda).toBeUndefined();
     expect(payload.destinoIda).toBeUndefined();
-    expect(payload.origemVolta).toBeUndefined();
-    expect(payload.destinoVolta).toBeUndefined();
+    expect(result.origemVolta).toBe('NVT');
+    expect(result.destinoVolta).toBe('SDU');
   });
 
   it('documenta lacuna atual: Smart Paste de um trecho de volta retorna origem e destino genericos', () => {
@@ -216,5 +220,32 @@ describe('extrairDadosSmartPaste com fixtures reais', () => {
 
     expect(result.pontos).toBe('67');
     expect(result.taxaEmbarque).toBe('86');
+  });
+
+  it('extrai ida e volta completas da fixture operacional LATAM Salvador', () => {
+    const text = readFileSync(
+      join(fixturesDir, 'latam', 'operacional-salvador-ida-volta.txt'),
+      'utf8'
+    );
+    const result = extrairDadosSmartPaste(text);
+
+    expect(result).toMatchObject({
+      tipoVoo: 'ida_volta',
+      origem: 'GRU',
+      destino: 'SSA',
+      origemVolta: 'SSA',
+      destinoVolta: 'GRU',
+      dataIda: '2026-09-11',
+      dataVolta: '2026-09-14',
+      horaSaidaIda: '09:50',
+      horaChegadaIda: '12:10',
+      horaSaidaVolta: '18:35',
+      horaChegadaVolta: '21:05',
+      companhia: 'Latam',
+      paradasIda: 'Direto',
+      paradasVolta: 'Direto',
+      pontos: '36',
+      taxaEmbarque: '89',
+    });
   });
 });

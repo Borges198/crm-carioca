@@ -1,5 +1,14 @@
 import { readFileSync } from 'node:fs';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
+import RevisaoItinerario from '../components/RevisaoItinerario';
+import { extrairCandidatosSmartPaste } from '../lib/smartPasteCandidatesUtils';
+import {
+  confirmarRevisaoItinerario,
+  criarRevisaoItinerario,
+  obterItinerarioConfirmado,
+} from './revisaoItinerarioUtils';
 import { extrairDadosSmartPaste } from './smartPasteUtils';
 import {
   resolverItinerarioPendenteSmartPaste,
@@ -12,6 +21,13 @@ const textoEstruturado = [
   '01/09/2026 10:00 AJU | Azul | AD 4101',
 ].join('\n');
 const sourcePage = readFileSync(new URL('../app/page.tsx', import.meta.url), 'utf8');
+const textoLatamOperacional = readFileSync(
+  new URL(
+    '../../tests/fixtures/smart-paste/latam/operacional-salvador-ida-volta.txt',
+    import.meta.url
+  ),
+  'utf8'
+);
 
 function trechoDaPagina(inicio: string, fim: string) {
   return sourcePage.slice(sourcePage.indexOf(inicio), sourcePage.indexOf(fim));
@@ -206,13 +222,14 @@ describe('integração controlada do itinerário no Smart Paste global', () => {
     const resolverEstruturado = handler.indexOf(
       'resolverItinerarioPendenteSmartPaste(texto)'
     );
-    const estadoFinal = handler.indexOf('setItinerarioPendente(', resolverEstruturado);
+    const estadoFinal = handler.indexOf('setRevisaoItinerario(', resolverEstruturado);
 
     expect(ultimaAplicacaoLegada).toBeGreaterThan(-1);
     expect(resolverEstruturado).toBeGreaterThan(ultimaAplicacaoLegada);
     expect(estadoFinal).toBeGreaterThan(resolverEstruturado);
-    expect(handler).toContain('if (itinerarioExtraido) setItinerarioPendente(itinerarioExtraido)');
-    expect(handler).toContain('else setItinerarioPendente(undefined)');
+    expect(handler).toContain(
+      'setRevisaoItinerario(criarRevisaoItinerario(itinerarioExtraido))'
+    );
   });
 
   it.each([
@@ -224,7 +241,7 @@ describe('integração controlada do itinerário no Smart Paste global', () => {
     const handler = trechoDaPagina(inicio, fim);
 
     expect(handler).not.toContain('resolverItinerarioPendenteSmartPaste');
-    expect(handler.indexOf('setItinerarioPendente(undefined)'))
+    expect(handler.indexOf('setRevisaoItinerario(descartarRevisaoItinerario())'))
       .toBeGreaterThan(handler.indexOf(ultimaAplicacao));
   });
 
@@ -234,8 +251,89 @@ describe('integração controlada do itinerário no Smart Paste global', () => {
       'const aplicarCandidatoSmartPaste'
     );
 
-    expect(leitura).not.toContain('setItinerarioPendente');
+    expect(leitura).not.toContain('setRevisaoItinerario');
     expect(leitura.indexOf('return null'))
       .toBeLessThan(leitura.indexOf('extrairDadosSmartPaste(text)'));
+  });
+
+  it('15. percorre texto LATAM real, parser, revisão e renderização sem mock', () => {
+    const itinerario = resolverItinerarioPendenteSmartPaste(textoLatamOperacional);
+    const revisao = criarRevisaoItinerario(itinerario);
+
+    expect(revisao).toMatchObject({ confirmado: false });
+    expect(revisao.itinerario?.ida.pernas[0]).toMatchObject({
+      origem: 'GRU',
+      destino: 'SSA',
+      dataSaida: '2026-09-11',
+      horaSaida: '09:50',
+      horaChegada: '12:10',
+    });
+    expect(revisao.itinerario?.volta?.pernas[0]).toMatchObject({
+      origem: 'SSA',
+      destino: 'GRU',
+      dataSaida: '2026-09-14',
+      horaSaida: '18:35',
+      horaChegada: '21:05',
+    });
+    expect(obterItinerarioConfirmado(revisao)).toBeUndefined();
+
+    if (!revisao.itinerario) throw new Error('A revisão LATAM deveria conter itinerário');
+    const html = renderToStaticMarkup(createElement(RevisaoItinerario, {
+      itinerario: revisao.itinerario,
+      confirmado: revisao.confirmado,
+      onConfirmar: vi.fn(),
+      onDescartar: vi.fn(),
+    }));
+
+    expect(html).toContain('Itinerário identificado');
+    expect(html).toContain('Aguardando revisão');
+    expect(html).toContain('GRU');
+    expect(html).toContain('SSA');
+    expect(html.indexOf('GRU')).toBeLessThan(html.indexOf('SSA'));
+    expect(html.indexOf('SSA', html.indexOf('SSA') + 1))
+      .toBeLessThan(html.lastIndexOf('GRU'));
+    expect(html).toContain('11/09/2026 às 09:50');
+    expect(html).toContain('14/09/2026 às 18:35');
+    expect(html).toContain('Confirmar itinerário');
+
+    const confirmado = confirmarRevisaoItinerario(revisao);
+    expect(obterItinerarioConfirmado(confirmado)).toBe(revisao.itinerario);
+  });
+
+  it('16. aplica a rota de volta explícita no handler global após a extração', () => {
+    const handler = trechoDaPagina(
+      'const handleSmartPaste =',
+      'const handleSmartPasteIda ='
+    );
+    const extracao = handler.indexOf('const { texto, dadosExtraidos } = leitura');
+    const origemVolta = handler.indexOf(
+      'if (dadosExtraidos.origemVolta) setOrigemVolta(dadosExtraidos.origemVolta)'
+    );
+    const destinoVolta = handler.indexOf(
+      'if (dadosExtraidos.destinoVolta) setDestinoVolta(dadosExtraidos.destinoVolta)'
+    );
+
+    expect(origemVolta).toBeGreaterThan(extracao);
+    expect(destinoVolta).toBeGreaterThan(origemVolta);
+  });
+
+  it('17. preserva os candidatos financeiros do texto operacional LATAM', () => {
+    expect(extrairCandidatosSmartPaste(textoLatamOperacional).candidates).toEqual([
+      {
+        trecho: 'ida',
+        raw: { pontos: 17795, taxa: 35.75 },
+        rounded: { pontos: 18, taxa: 36 },
+      },
+      {
+        trecho: 'volta',
+        raw: { pontos: 17795, taxa: 52.72 },
+        rounded: { pontos: 18, taxa: 53 },
+      },
+      {
+        trecho: 'total',
+        raw: { pontos: 35590, taxa: 88.47 },
+        rounded: { pontos: 36, taxa: 89 },
+      },
+    ]);
   });
 });

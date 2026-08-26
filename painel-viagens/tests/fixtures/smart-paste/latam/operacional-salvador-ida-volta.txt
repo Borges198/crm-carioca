@@ -1,0 +1,43 @@
+Combine suas milhas + dinheiro para pagar
+
+Ida e volta
+
+São Paulo a Salvador da Bahia — sex., 11 de set.
+
+Voo de ida em cabine LIGHT. sexta-feira, 11 de setembro de 2026
+
+Voo com hora de partida 9:50, saindo de São Paulo.
+Hora de chegada 12:10 na cidade de Salvador da Bahia.
+Voo direto com duração de 2 horas 20 minutos.
+Preço por passageiro a partir de 17795 milhas.
+Operado pela latam airlines brasil.
+
+9:50 GRU
+Direto
+2 h 20 min.
+12:10 SSA
+
+LATAM Airlines Brasil
+
+17.795 milhas + BRL 35,75
+
+Salvador da Bahia a São Paulo — seg., 14 de set.
+
+Voo de volta em cabine LIGHT. segunda-feira, 14 de setembro de 2026
+
+Voo com hora de partida 18:35, saindo de Salvador da Bahia.
+Hora de chegada 21:05 na cidade de São Paulo.
+Voo direto com duração de 2 horas 30 minutos.
+Preço por passageiro a partir de 17795 milhas.
+Operado pela latam airlines brasil.
+
+18:35 SSA
+Direto
+2 h 30 min.
+21:05 GRU
+
+LATAM Airlines Brasil
+
+17.795 milhas + BRL 52,72
+
+35.590 milhas + BRL 88,47

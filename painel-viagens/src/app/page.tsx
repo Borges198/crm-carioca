@@ -11,16 +11,24 @@ import FormularioCotacao, {
   type IdentidadeSessaoCotacao,
 } from '../components/FormularioCotacao';
 import BilhetePreview from '../components/BilhetePreview';
+import RevisaoItinerario from '../components/RevisaoItinerario';
 import { useAuth } from '../context/AuthContext';
 import type { Cliente, Companhia, NovaCotacao } from '../types';
 import { extrairDadosSmartPaste } from '../utils/smartPasteUtils';
 import { resolverItinerarioPendenteSmartPaste } from '../utils/smartPasteItinerarioIntegration';
+import {
+  confirmarRevisaoItinerario,
+  criarRevisaoItinerario,
+  descartarRevisaoItinerario,
+  obterItinerarioConfirmado,
+  type EstadoRevisaoItinerario,
+} from '../utils/revisaoItinerarioUtils';
 import { mapearSmartPasteParaTrecho } from '../utils/smartPasteTrechoUtils';
 import { gerarMensagemWhatsApp } from '../utils/whatsappMessageUtils';
 import { extrairCandidatosSmartPaste, type SmartPasteCandidate, type SmartPasteCandidatesResult } from '../lib/smartPasteCandidatesUtils';
 import type { LeadStatus, ProdutoOfertado } from '../lib/leadUtils';
 import { DEFAULT_AGENCY_ID } from '../types';
-import { submeterNovaCotacao, type ItinerarioPendente } from './cotacaoCreationFlow';
+import { submeterNovaCotacao } from './cotacaoCreationFlow';
 
 interface SmartPasteConferencia extends SmartPasteCandidatesResult {
   textoOrigemPreview: string;
@@ -104,7 +112,9 @@ export default function Home() {
   const [produtosOfertados, setProdutosOfertados] = useState<ProdutoOfertado[]>([]);
   const [observacao, setObservacao] = useState('');
   const [leadStatus, setLeadStatus] = useState<LeadStatus>('novo');
-  const [itinerarioPendente, setItinerarioPendente] = useState<ItinerarioPendente>();
+  const [revisaoItinerario, setRevisaoItinerario] = useState<EstadoRevisaoItinerario>(
+    () => descartarRevisaoItinerario()
+  );
 
   const ticketRef = useRef<HTMLDivElement>(null);
 
@@ -194,7 +204,9 @@ export default function Home() {
       if (dadosExtraidos.horaChegadaIda) setHoraChegadaIda(dadosExtraidos.horaChegadaIda);
       if (dadosExtraidos.destino) setDestino(dadosExtraidos.destino);
       if (dadosExtraidos.horaSaidaVolta) setHoraSaidaVolta(dadosExtraidos.horaSaidaVolta);
+      if (dadosExtraidos.origemVolta) setOrigemVolta(dadosExtraidos.origemVolta);
       if (dadosExtraidos.horaChegadaVolta) setHoraChegadaVolta(dadosExtraidos.horaChegadaVolta);
+      if (dadosExtraidos.destinoVolta) setDestinoVolta(dadosExtraidos.destinoVolta);
       if (dadosExtraidos.dataIda) setDataIda(dadosExtraidos.dataIda);
       if (dadosExtraidos.dataVolta) setDataVolta(dadosExtraidos.dataVolta);
       else if (dadosExtraidos.limparDataVolta) setDataVolta('');
@@ -205,8 +217,7 @@ export default function Home() {
       if (dadosExtraidos.taxaEmbarque) setTaxaEmbarque(dadosExtraidos.taxaEmbarque);
 
       const itinerarioExtraido = resolverItinerarioPendenteSmartPaste(texto);
-      if (itinerarioExtraido) setItinerarioPendente(itinerarioExtraido);
-      else setItinerarioPendente(undefined);
+      setRevisaoItinerario(criarRevisaoItinerario(itinerarioExtraido));
       alert("✨ Voo extraído e colado com sucesso!");
     } catch {
       alert("Não foi possível colar. Verifique a permissão da área de transferência.");
@@ -230,7 +241,7 @@ export default function Home() {
       if (updates.origem) setOrigem(updates.origem);
       if (updates.destino) setDestino(updates.destino);
 
-      setItinerarioPendente(undefined);
+      setRevisaoItinerario(descartarRevisaoItinerario());
       alert("Dados da ida colados com sucesso!");
     } catch {
       alert("Não foi possível colar. Verifique a permissão da área de transferência.");
@@ -255,7 +266,7 @@ export default function Home() {
       if (updates.origemVolta) setOrigemVolta(updates.origemVolta);
       if (updates.destinoVolta) setDestinoVolta(updates.destinoVolta);
 
-      setItinerarioPendente(undefined);
+      setRevisaoItinerario(descartarRevisaoItinerario());
       alert("Dados da volta colados com sucesso!");
     } catch {
       alert("Não foi possível colar. Verifique a permissão da área de transferência.");
@@ -395,8 +406,8 @@ export default function Home() {
           ...camposRotasPorTrecho,
           ...camposPorTrecho
         },
-        itinerarioPendente,
-        aoLimparItinerario: () => setItinerarioPendente(undefined),
+        itinerarioPendente: obterItinerarioConfirmado(revisaoItinerario),
+        aoLimparItinerario: () => setRevisaoItinerario(descartarRevisaoItinerario()),
       });
       
       const textoMensagem = gerarMensagemWhatsApp({ cliente, valorTotal });
@@ -432,6 +443,15 @@ export default function Home() {
             Crie uma cotação e acompanhe o status comercial depois.
           </p>
         </div>
+
+        {revisaoItinerario.itinerario && (
+          <RevisaoItinerario
+            itinerario={revisaoItinerario.itinerario}
+            confirmado={revisaoItinerario.confirmado}
+            onConfirmar={() => setRevisaoItinerario(confirmarRevisaoItinerario)}
+            onDescartar={() => setRevisaoItinerario(descartarRevisaoItinerario())}
+          />
+        )}
 
         {/* INVOCANDO O FORMULÁRIO */}
         <FormularioCotacao 
