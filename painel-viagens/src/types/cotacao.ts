@@ -26,6 +26,7 @@ export type TrechoCotacaoInput = Omit<TrechoCotacao, 'tipo'>;
 
 export interface Cotacao {
   id: string;
+  acompanhamentoId?: string;
   clienteId?: string;
   cliente: string;
   telefone?: string;

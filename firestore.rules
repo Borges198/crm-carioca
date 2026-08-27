@@ -69,6 +69,83 @@ service cloud.firestore {
       ]);
     }
 
+    function hasAcompanhamentoId(data) {
+      return ("acompanhamentoId" in data)
+        && data.acompanhamentoId is string
+        && data.acompanhamentoId.size() > 0;
+    }
+
+    function preservesOrCreatesValidAcompanhamentoLink() {
+      return (
+          !hasAcompanhamentoId(resource.data)
+          && !hasAcompanhamentoId(request.resource.data)
+        )
+        || (
+          hasAcompanhamentoId(resource.data)
+          && hasAcompanhamentoId(request.resource.data)
+          && request.resource.data.acompanhamentoId == resource.data.acompanhamentoId
+        )
+        || (
+          !hasAcompanhamentoId(resource.data)
+          && hasAcompanhamentoId(request.resource.data)
+          && isOwner()
+          && !exists(
+            /databases/$(database)/documents/acompanhamentos/$(request.resource.data.acompanhamentoId)
+          )
+          && existsAfter(
+            /databases/$(database)/documents/acompanhamentos/$(request.resource.data.acompanhamentoId)
+          )
+          && getAfter(
+            /databases/$(database)/documents/acompanhamentos/$(request.resource.data.acompanhamentoId)
+          ).data.ownerId == request.auth.uid
+          && getAfter(
+            /databases/$(database)/documents/acompanhamentos/$(request.resource.data.acompanhamentoId)
+          ).data.agencyId == userAgencyId()
+        );
+    }
+
+    function isValidAcompanhamentoCreate(acompanhamentoId) {
+      return isCreatingOwnAgencyDocument()
+        && request.resource.data.keys().hasAll([
+          "ownerId",
+          "agencyId",
+          "cotacaoAncoraId",
+          "proximaAcaoEm",
+          "createdAt",
+          "updatedAt"
+        ])
+        && request.resource.data.keys().hasOnly([
+          "ownerId",
+          "agencyId",
+          "cotacaoAncoraId",
+          "clienteId",
+          "proximaAcaoEm",
+          "createdAt",
+          "updatedAt"
+        ])
+        && request.resource.data.cotacaoAncoraId is string
+        && request.resource.data.cotacaoAncoraId.size() > 0
+        && (
+          !("clienteId" in request.resource.data)
+          || request.resource.data.clienteId is string
+        )
+        && (
+          request.resource.data.proximaAcaoEm == null
+          || request.resource.data.proximaAcaoEm is timestamp
+        )
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp
+        && existsAfter(
+          /databases/$(database)/documents/cotacoes/$(request.resource.data.cotacaoAncoraId)
+        )
+        && getAfter(
+          /databases/$(database)/documents/cotacoes/$(request.resource.data.cotacaoAncoraId)
+        ).data.ownerId == request.auth.uid
+        && getAfter(
+          /databases/$(database)/documents/cotacoes/$(request.resource.data.cotacaoAncoraId)
+        ).data.acompanhamentoId == acompanhamentoId;
+    }
+
     function supervisorCanUpdateCommercialFields() {
       return isSupervisor()
         && isSameAgency()
@@ -140,13 +217,36 @@ service cloud.firestore {
     }
 
     match /cotacoes/{cotacaoId} {
-      allow create: if isCreatingOwnAgencyDocument();
+      allow create: if isCreatingOwnAgencyDocument()
+        && !("acompanhamentoId" in request.resource.data);
       allow read: if (isApproved() && isOwner()) || ((isSupervisor() || isAdmin()) && isSameAgency());
-      allow update: if (isApproved() && isOwner() && preservesOwnership())
-        || supervisorCanUpdateCommercialFields()
-        || (isAdmin() && isSameAgency() && preservesOwnership());
+      allow update: if (
+          (isApproved() && isOwner() && preservesOwnership())
+          || supervisorCanUpdateCommercialFields()
+          || (isAdmin() && isSameAgency() && preservesOwnership())
+        )
+        && preservesOrCreatesValidAcompanhamentoLink();
       allow delete: if ((isAdmin() || isSupervisor()) && isSameAgency())
         || (isAgent() && isOwner());
+    }
+
+    match /acompanhamentos/{acompanhamentoId} {
+      allow create: if isValidAcompanhamentoCreate(acompanhamentoId);
+      allow get: if isApproved() && (!exists(
+          /databases/$(database)/documents/acompanhamentos/$(acompanhamentoId)
+        ) || isOwner());
+      allow list: if isApproved() && isOwner();
+      allow update: if isApproved()
+        && isOwner()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "proximaAcaoEm",
+          "updatedAt"
+        ])
+        && (
+          request.resource.data.proximaAcaoEm == null
+          || request.resource.data.proximaAcaoEm is timestamp
+        )
+        && request.resource.data.updatedAt is timestamp;
     }
 
     match /clientes/{clienteId} {
