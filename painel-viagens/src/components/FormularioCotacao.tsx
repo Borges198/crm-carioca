@@ -408,7 +408,7 @@ export default function FormularioCotacao({
             }} 
             onBlur={() => setTimeout(() => setMostrarSugestoes(false), 200)}
             placeholder="Nome do Cliente" 
-            className="w-full px-4 py-2 border rounded-lg bg-slate-50 focus:bg-white transition" 
+            className="w-full px-4 py-2 border rounded-lg bg-slate-50 text-slate-700 placeholder:text-slate-400 focus:bg-white transition"
           />
           
           {/* LISTA SUSPENSA DE SUGESTÕES */}
@@ -449,7 +449,7 @@ export default function FormularioCotacao({
             );
           }}
           placeholder="Telefone do solicitante"
-          className="w-full px-4 py-2 border rounded-lg bg-slate-50 focus:bg-white transition"
+          className="w-full px-4 py-2 border rounded-lg bg-slate-50 text-slate-700 placeholder:text-slate-400 focus:bg-white transition"
         />
         {clienteSugeridoPorTelefone && (
           <div className="flex flex-col gap-2 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 sm:flex-row sm:items-center sm:justify-between">
@@ -481,13 +481,13 @@ export default function FormularioCotacao({
             </button>
           </div>
           <div className="grid grid-cols-2 gap-2 mb-2">
-            <input type="text" value={origem} onChange={(e) => setOrigem(e.target.value.toUpperCase())} placeholder="Origem" maxLength={3} className="w-full px-2 py-1 border rounded text-sm bg-white uppercase text-center" />
-            <input type="text" value={destino} onChange={(e) => setDestino(e.target.value.toUpperCase())} placeholder="Destino" maxLength={3} className="w-full px-2 py-1 border rounded text-sm bg-white uppercase text-center" />
+            <input type="text" value={origem} onChange={(e) => setOrigem(e.target.value.toUpperCase())} placeholder="Origem" maxLength={3} className="w-full px-2 py-1 border rounded text-sm bg-white text-slate-700 placeholder:text-slate-400 uppercase text-center" />
+            <input type="text" value={destino} onChange={(e) => setDestino(e.target.value.toUpperCase())} placeholder="Destino" maxLength={3} className="w-full px-2 py-1 border rounded text-sm bg-white text-slate-700 placeholder:text-slate-400 uppercase text-center" />
           </div>
           <div className="grid grid-cols-2 gap-2 mb-2">
             <input type="date" value={dataIda} onChange={(e) => setDataIda(e.target.value)} className="col-span-2 px-2 py-1 border rounded text-sm bg-white text-slate-700" />
-            <input type="text" value={horaSaidaIda} onChange={(e) => setHoraSaidaIda(maskHora(e.target.value))} placeholder="Saída" className="px-2 py-1 border rounded text-sm bg-white text-center" />
-            <input type="text" value={horaChegadaIda} onChange={(e) => setHoraChegadaIda(maskHora(e.target.value))} placeholder="Chegada" className="px-2 py-1 border rounded text-sm bg-white text-center" />
+            <input type="text" value={horaSaidaIda} onChange={(e) => setHoraSaidaIda(maskHora(e.target.value))} placeholder="Saída" className="px-2 py-1 border rounded text-sm bg-white text-slate-700 placeholder:text-slate-400 text-center" />
+            <input type="text" value={horaChegadaIda} onChange={(e) => setHoraChegadaIda(maskHora(e.target.value))} placeholder="Chegada" className="px-2 py-1 border rounded text-sm bg-white text-slate-700 placeholder:text-slate-400 text-center" />
           </div>
           <select value={paradasIda} onChange={(e) => setParadasIda(e.target.value)} className="w-full px-2 py-1 border rounded text-sm bg-white text-slate-700"> 
             <option>Direto</option>
@@ -509,13 +509,13 @@ export default function FormularioCotacao({
               </button>
             </div>
             <div className="grid grid-cols-2 gap-2 mb-2">
-              <input type="text" value={origemVolta} onChange={(e) => setOrigemVolta(e.target.value.toUpperCase())} placeholder="Origem" maxLength={3} className="w-full px-2 py-1 border rounded text-sm bg-white uppercase text-center" />
-              <input type="text" value={destinoVolta} onChange={(e) => setDestinoVolta(e.target.value.toUpperCase())} placeholder="Destino" maxLength={3} className="w-full px-2 py-1 border rounded text-sm bg-white uppercase text-center" />
+              <input type="text" value={origemVolta} onChange={(e) => setOrigemVolta(e.target.value.toUpperCase())} placeholder="Origem" maxLength={3} className="w-full px-2 py-1 border rounded text-sm bg-white text-slate-700 placeholder:text-slate-400 uppercase text-center" />
+              <input type="text" value={destinoVolta} onChange={(e) => setDestinoVolta(e.target.value.toUpperCase())} placeholder="Destino" maxLength={3} className="w-full px-2 py-1 border rounded text-sm bg-white text-slate-700 placeholder:text-slate-400 uppercase text-center" />
             </div>
             <div className="grid grid-cols-2 gap-2 mb-2">
               <input type="date" value={dataVolta} onChange={(e) => setDataVolta(e.target.value)} className="col-span-2 px-2 py-1 border rounded text-sm bg-white text-slate-700" />
-              <input type="text" value={horaSaidaVolta} onChange={(e) => setHoraSaidaVolta(maskHora(e.target.value))} placeholder="Saída" className="px-2 py-1 border rounded text-sm bg-white text-center" />
-              <input type="text" value={horaChegadaVolta} onChange={(e) => setHoraChegadaVolta(maskHora(e.target.value))} placeholder="Chegada" className="px-2 py-1 border rounded text-sm bg-white text-center" />
+              <input type="text" value={horaSaidaVolta} onChange={(e) => setHoraSaidaVolta(maskHora(e.target.value))} placeholder="Saída" className="px-2 py-1 border rounded text-sm bg-white text-slate-700 placeholder:text-slate-400 text-center" />
+              <input type="text" value={horaChegadaVolta} onChange={(e) => setHoraChegadaVolta(maskHora(e.target.value))} placeholder="Chegada" className="px-2 py-1 border rounded text-sm bg-white text-slate-700 placeholder:text-slate-400 text-center" />
             </div>
             <select value={paradasVolta} onChange={(e) => setParadasVolta(e.target.value)} className="w-full px-2 py-1 border rounded text-sm bg-white text-slate-700">
               <option>Direto</option>
@@ -556,11 +556,11 @@ export default function FormularioCotacao({
         <div className="grid grid-cols-2 gap-4">
           <label className="block">
             <span className="text-xs font-bold text-slate-500 uppercase mb-1 block">Pontos/Milhas da ida</span>
-            <input type="text" value={pontosIda} onChange={(e) => setPontosIda(e.target.value)} placeholder="Ida" className="w-full px-4 py-2 border rounded-lg bg-slate-50 text-center" />
+            <input type="text" value={pontosIda} onChange={(e) => setPontosIda(e.target.value)} placeholder="Ida" className="w-full px-4 py-2 border rounded-lg bg-slate-50 text-slate-700 placeholder:text-slate-400 text-center" />
           </label>
           <label className="block">
             <span className="text-xs font-bold text-slate-500 uppercase mb-1 block">Taxa da ida</span>
-            <input type="text" value={taxaIda} onChange={(e) => setTaxaIda(e.target.value)} placeholder="Taxa ida" className="w-full px-4 py-2 border rounded-lg bg-slate-50 text-center" />
+            <input type="text" value={taxaIda} onChange={(e) => setTaxaIda(e.target.value)} placeholder="Taxa ida" className="w-full px-4 py-2 border rounded-lg bg-slate-50 text-slate-700 placeholder:text-slate-400 text-center" />
           </label>
         </div>
 
@@ -568,11 +568,11 @@ export default function FormularioCotacao({
           <div className="grid grid-cols-2 gap-4">
             <label className="block">
               <span className="text-xs font-bold text-slate-500 uppercase mb-1 block">Pontos/Milhas da volta</span>
-              <input type="text" value={pontosVolta} onChange={(e) => setPontosVolta(e.target.value)} placeholder="Volta" className="w-full px-4 py-2 border rounded-lg bg-slate-50 text-center" />
+              <input type="text" value={pontosVolta} onChange={(e) => setPontosVolta(e.target.value)} placeholder="Volta" className="w-full px-4 py-2 border rounded-lg bg-slate-50 text-slate-700 placeholder:text-slate-400 text-center" />
             </label>
             <label className="block">
               <span className="text-xs font-bold text-slate-500 uppercase mb-1 block">Taxa da volta</span>
-              <input type="text" value={taxaVolta} onChange={(e) => setTaxaVolta(e.target.value)} placeholder="Taxa volta" className="w-full px-4 py-2 border rounded-lg bg-slate-50 text-center" />
+              <input type="text" value={taxaVolta} onChange={(e) => setTaxaVolta(e.target.value)} placeholder="Taxa volta" className="w-full px-4 py-2 border rounded-lg bg-slate-50 text-slate-700 placeholder:text-slate-400 text-center" />
             </label>
           </div>
         )}
@@ -591,8 +591,8 @@ export default function FormularioCotacao({
         )}
 
         <div className="grid grid-cols-2 gap-4">
-          <input type="text" value={pontos} onChange={(e) => setPontos(e.target.value)} placeholder="Pontos" className="w-full px-4 py-2 border rounded-lg bg-slate-50 text-center" />
-          <input type="text" value={taxaEmbarque} onChange={(e) => setTaxaEmbarque(e.target.value)} placeholder="Taxa" className="w-full px-4 py-2 border rounded-lg bg-slate-50 text-center" />
+          <input type="text" value={pontos} onChange={(e) => setPontos(e.target.value)} placeholder="Pontos" className="w-full px-4 py-2 border rounded-lg bg-slate-50 text-slate-700 placeholder:text-slate-400 text-center" />
+          <input type="text" value={taxaEmbarque} onChange={(e) => setTaxaEmbarque(e.target.value)} placeholder="Taxa" className="w-full px-4 py-2 border rounded-lg bg-slate-50 text-slate-700 placeholder:text-slate-400 text-center" />
         </div>
 
         <section className="rounded-lg border border-slate-200 bg-slate-50 p-3">
