@@ -1,0 +1,22 @@
+{
+  "dataReferencia": "2026-01-01",
+  "oportunidades": [
+    {
+      "id": "OPORTUNIDADE_EXEMPLO_001",
+      "clienteId": "CLIENTE_EXEMPLO_001",
+      "status": "STATUS_EXEMPLO",
+      "proximaAcaoEm": "2026-01-02",
+      "acaoId": "ACAO_EXEMPLO_001"
+    }
+  ],
+  "pesquisas": [
+    {
+      "id": "PESQUISA_EXEMPLO_001",
+      "clienteId": "CLIENTE_EXEMPLO_001",
+      "destino": "DESTINO_EXEMPLO",
+      "dataIda": "2026-02-01",
+      "dataVolta": "2026-02-10",
+      "status": "STATUS_EXEMPLO"
+    }
+  ]
+}

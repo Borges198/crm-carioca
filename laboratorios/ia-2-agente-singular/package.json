@@ -1,0 +1,13 @@
+{
+  "name": "ia-2-agente-singular",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "benchmark": "node src/run-benchmark.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
