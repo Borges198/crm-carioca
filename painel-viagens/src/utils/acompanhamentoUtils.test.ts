@@ -8,6 +8,7 @@ import {
   normalizarDataComercialParaTimestamp,
   obterClienteIdConsistente,
   ordenarPorProximaAcao,
+  resolverTipoProximaAcao,
   selecionarCotacaoAncoraId,
   vincularCotacoesLocalmente,
 } from './acompanhamentoUtils';
@@ -131,6 +132,51 @@ describe('classificação da próxima ação', () => {
     expect(classificarProximaAcao(null, hoje)).toBe('NÃO DEFINIDA');
   });
 
+  it('interpreta acompanhamento legado com data como DATA', () => {
+    const acompanhamentoLegado = {
+      proximaAcaoEm: normalizarDataComercialParaTimestamp('2026-08-29'),
+    };
+
+    expect(resolverTipoProximaAcao(acompanhamentoLegado)).toBe('DATA');
+    expect(classificarProximaAcao(acompanhamentoLegado, hoje)).toBe('PRÓXIMA');
+  });
+
+  it('interpreta acompanhamento legado sem data como NÃO DEFINIDA', () => {
+    expect(classificarProximaAcao({ proximaAcaoEm: null }, hoje)).toBe('NÃO DEFINIDA');
+  });
+
+  it.each([
+    ['2026-08-27', 'ATRASADA'],
+    ['2026-08-28', 'HOJE'],
+    ['2026-08-29', 'PRÓXIMA'],
+  ] as const)('classifica DATA em %s como %s', (data, classificacao) => {
+    expect(classificarProximaAcao({
+      tipoProximaAcao: 'DATA',
+      proximaAcaoEm: normalizarDataComercialParaTimestamp(data),
+    }, hoje)).toBe(classificacao);
+  });
+
+  it('classifica DIARIA sem depender de Timestamp', () => {
+    expect(classificarProximaAcao({
+      tipoProximaAcao: 'DIARIA',
+      proximaAcaoEm: null,
+    }, hoje)).toBe('DIÁRIA');
+  });
+
+  it('classifica SEM_DATA como SEM PRÓXIMA AÇÃO', () => {
+    expect(classificarProximaAcao({
+      tipoProximaAcao: 'SEM_DATA',
+      proximaAcaoEm: null,
+    }, hoje)).toBe('SEM PRÓXIMA AÇÃO');
+  });
+
+  it('SEM_DATA nunca fica atrasada mesmo que preserve um Timestamp legado', () => {
+    expect(classificarProximaAcao({
+      tipoProximaAcao: 'SEM_DATA',
+      proximaAcaoEm: normalizarDataComercialParaTimestamp('2026-08-20'),
+    }, hoje)).toBe('SEM PRÓXIMA AÇÃO');
+  });
+
   it('usa o dia UTC mesmo quando a referência possui outro timezone', () => {
     const referenciaComFuso = new Date('2026-08-28T00:30:00+14:00');
 
@@ -211,5 +257,79 @@ describe('ordenação pela próxima ação', () => {
     ordenar(itens);
 
     expect(itens.map((item) => item.id)).toEqual(['sem-data', 'atrasada']);
+  });
+});
+
+describe('ordenação por recorrência da próxima ação', () => {
+  const hoje = new Date('2026-08-28T18:30:00.000Z');
+  const criarItem = (
+    id: string,
+    tipoProximaAcao: Acompanhamento['tipoProximaAcao'],
+    data: string | null = null
+  ) => ({
+    id,
+    tipoProximaAcao,
+    proximaAcaoEm: data ? normalizarDataComercialParaTimestamp(data) : null,
+  });
+  const ordenar = (itens: ReturnType<typeof criarItem>[]) => ordenarPorProximaAcao(
+    itens,
+    (item) => ({
+      tipoProximaAcao: item.tipoProximaAcao,
+      proximaAcaoEm: item.proximaAcaoEm,
+    }),
+    hoje
+  );
+
+  it('aplica a ordem completa dos seis grupos', () => {
+    expect(ordenar([
+      criarItem('nao-definida', undefined),
+      criarItem('sem-proxima-acao', 'SEM_DATA'),
+      criarItem('proxima', 'DATA', '2026-08-29'),
+      criarItem('diaria', 'DIARIA'),
+      criarItem('hoje', 'DATA', '2026-08-28'),
+      criarItem('atrasada', 'DATA', '2026-08-27'),
+    ]).map(({ id }) => id)).toEqual([
+      'atrasada',
+      'hoje',
+      'diaria',
+      'proxima',
+      'sem-proxima-acao',
+      'nao-definida',
+    ]);
+  });
+
+  it.each([
+    ['HOJE', [
+      criarItem('primeiro', 'DATA', '2026-08-28'),
+      criarItem('segundo', 'DATA', '2026-08-28'),
+    ]],
+    ['DIÁRIA', [
+      criarItem('primeiro', 'DIARIA'),
+      criarItem('segundo', 'DIARIA'),
+    ]],
+    ['SEM PRÓXIMA AÇÃO', [
+      criarItem('primeiro', 'SEM_DATA'),
+      criarItem('segundo', 'SEM_DATA'),
+    ]],
+    ['NÃO DEFINIDA', [
+      criarItem('primeiro', undefined),
+      criarItem('segundo', undefined),
+    ]],
+  ] as const)('preserva ordem estável em %s', (_grupo, itens) => {
+    expect(ordenar([...itens])).toEqual(itens);
+  });
+
+  it('ordena atrasadas pela data mais antiga primeiro', () => {
+    expect(ordenar([
+      criarItem('mais-recente', 'DATA', '2026-08-27'),
+      criarItem('mais-antiga', 'DATA', '2026-08-20'),
+    ]).map(({ id }) => id)).toEqual(['mais-antiga', 'mais-recente']);
+  });
+
+  it('ordena próximas pela data mais próxima primeiro', () => {
+    expect(ordenar([
+      criarItem('mais-distante', 'DATA', '2026-09-10'),
+      criarItem('mais-proxima', 'DATA', '2026-08-29'),
+    ]).map(({ id }) => id)).toEqual(['mais-proxima', 'mais-distante']);
   });
 });

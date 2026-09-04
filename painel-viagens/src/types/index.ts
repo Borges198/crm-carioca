@@ -9,7 +9,11 @@ export type {
   TrechoCotacaoInput,
 } from './cotacao';
 export type { Cliente, NovoCliente } from './cliente';
-export type { Acompanhamento, NovoAcompanhamento } from './acompanhamento';
+export type {
+  Acompanhamento,
+  NovoAcompanhamento,
+  TipoProximaAcao,
+} from './acompanhamento';
 export type { UsuarioPerfil } from './usuario';
 export {
   DEFAULT_AGENCY_ID,
