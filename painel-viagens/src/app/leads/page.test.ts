@@ -1,14 +1,25 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
-import type { Cotacao } from '../../types';
+import type { Acompanhamento, Cotacao } from '../../types';
 import { filterBySearch } from '../../utils/searchUtils';
+import { normalizarDataComercialParaTimestamp } from '../../utils/acompanhamentoUtils';
 
 const clientesService = vi.hoisted(() => ({
   atualizarCliente: vi.fn(),
 }));
 
 vi.mock('firebase/firestore', () => ({
-  Timestamp: class Timestamp {},
+  Timestamp: class Timestamp {
+    constructor(private readonly value = new Date(0)) {}
+
+    static fromDate(value: Date) {
+      return new this(value);
+    }
+
+    toDate() {
+      return this.value;
+    }
+  },
 }));
 
 vi.mock('../../context/AuthContext', () => ({
@@ -36,12 +47,17 @@ import {
   avancarIdentidadeSessaoLeads,
   agruparCotacoesEmOportunidades,
   atualizarTelefoneCotacaoPorId,
+  CLASSIFICACAO_PROXIMA_ACAO_CLASSES,
+  formatarProximaAcaoNoCard,
+  montarDadosPersistenciaProximaAcao,
   obterCotacoesDaCartela,
   identidadeSessaoLeadsCorresponde,
   montarCamposPesquisaOportunidade,
   montarChaveOportunidade,
   montarDadosViagemCotacao,
   montarPayloadTelefoneCotacao,
+  OPCOES_TIPO_PROXIMA_ACAO,
+  ordenarOportunidadesPorProximaAcao,
   podeIniciarEdicaoTelefone,
   persistirTelefoneCotacao,
   sessaoPodeMutarLeads,
@@ -50,6 +66,115 @@ import {
 } from './page';
 
 const sourceLeadsPage = readFileSync(new URL('./page.tsx', import.meta.url), 'utf8');
+
+describe('modos da próxima ação na tela de Leads', () => {
+  it('oferece exatamente DATA, DIARIA e SEM_DATA com os rótulos aprovados', () => {
+    expect(OPCOES_TIPO_PROXIMA_ACAO).toEqual([
+      { value: 'DATA', label: 'Escolher uma data' },
+      { value: 'DIARIA', label: 'Diariamente' },
+      { value: 'SEM_DATA', label: 'Sem próxima ação no momento' },
+    ]);
+    expect(sourceLeadsPage).toContain('type="radio"');
+  });
+
+  it('seleciona DATA e prepara data válida para salvar', () => {
+    const dados = montarDadosPersistenciaProximaAcao('DATA', '2026-08-28');
+
+    expect(dados.tipoProximaAcao).toBe('DATA');
+    expect(dados.proximaAcaoEm?.toDate().toISOString()).toBe('2026-08-28T12:00:00.000Z');
+  });
+
+  it.each([
+    ['DIARIA', ''],
+    ['SEM_DATA', 'data ignorada'],
+  ] as const)('seleciona %s e prepara null para salvar sem exigir data', (tipo, data) => {
+    expect(montarDadosPersistenciaProximaAcao(tipo, data)).toEqual({
+      tipoProximaAcao: tipo,
+      proximaAcaoEm: null,
+    });
+  });
+
+  it('DATA exige data válida', () => {
+    expect(() => montarDadosPersistenciaProximaAcao('DATA', '')).toThrow(
+      'Data comercial inválida'
+    );
+    expect(sourceLeadsPage).toContain("editTipoProximaAcao === 'DATA'");
+    expect(sourceLeadsPage).toContain('required');
+  });
+
+  it('permite mudar entre os três modos sem reaproveitar data fora de DATA', () => {
+    const data = montarDadosPersistenciaProximaAcao('DATA', '2026-08-28');
+    const diaria = montarDadosPersistenciaProximaAcao('DIARIA', '2026-08-28');
+    const semData = montarDadosPersistenciaProximaAcao('SEM_DATA', '2026-08-28');
+
+    expect(data.proximaAcaoEm).not.toBeNull();
+    expect(diaria.proximaAcaoEm).toBeNull();
+    expect(semData.proximaAcaoEm).toBeNull();
+  });
+
+  it('mantém a apresentação legada com e sem data', () => {
+    expect(formatarProximaAcaoNoCard({
+      proximaAcaoEm: normalizarDataComercialParaTimestamp('2026-08-28'),
+    })).toBe('28/08/2026');
+    expect(formatarProximaAcaoNoCard({ proximaAcaoEm: null })).toBe('Não definida');
+  });
+
+  it('disponibiliza os rótulos dos seis estados nos cards', () => {
+    expect(Object.keys(CLASSIFICACAO_PROXIMA_ACAO_CLASSES)).toEqual(expect.arrayContaining([
+      'ATRASADA',
+      'HOJE',
+      'DIÁRIA',
+      'PRÓXIMA',
+      'SEM PRÓXIMA AÇÃO',
+      'NÃO DEFINIDA',
+    ]));
+    expect(formatarProximaAcaoNoCard({
+      tipoProximaAcao: 'DIARIA',
+      proximaAcaoEm: null,
+    })).toBe('DIÁRIA');
+    expect(formatarProximaAcaoNoCard({
+      tipoProximaAcao: 'SEM_DATA',
+      proximaAcaoEm: null,
+    })).toBe('SEM PRÓXIMA AÇÃO');
+  });
+
+  it('ordena visualmente os seis grupos pelo contrato do 3A', () => {
+    const modos = [
+      ['nao-definida', undefined, null],
+      ['sem-data', 'SEM_DATA', null],
+      ['proxima', 'DATA', '2026-08-29'],
+      ['diaria', 'DIARIA', null],
+      ['hoje', 'DATA', '2026-08-28'],
+      ['atrasada', 'DATA', '2026-08-27'],
+    ] as const;
+    const oportunidades = modos.map(([id]) => agruparCotacoesEmOportunidades([
+      criarCotacao(id, { acompanhamentoId: id, telefoneNormalizado: id }),
+    ])[0]);
+    const acompanhamentos = modos.map(([id, tipoProximaAcao, data]) => ({
+      id,
+      ownerId: 'usuario-1',
+      agencyId: 'agencia-1',
+      cotacaoAncoraId: id,
+      tipoProximaAcao,
+      proximaAcaoEm: data ? normalizarDataComercialParaTimestamp(data) : null,
+      createdAt: normalizarDataComercialParaTimestamp('2026-08-01'),
+      updatedAt: normalizarDataComercialParaTimestamp('2026-08-01'),
+    })) satisfies Acompanhamento[];
+
+    expect(ordenarOportunidadesPorProximaAcao(
+      oportunidades,
+      acompanhamentos,
+      new Date('2026-08-28T18:00:00.000Z')
+    ).map((oportunidade) => oportunidade.cotacoes[0].acompanhamentoId)).toEqual([
+      'atrasada',
+      'hoje',
+      'diaria',
+      'proxima',
+      'sem-data',
+      'nao-definida',
+    ]);
+  });
+});
 
 function criarCotacao(id: string, overrides: Partial<Cotacao> = {}): Cotacao {
   return {

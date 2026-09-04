@@ -1,23 +1,26 @@
 import type { Timestamp } from 'firebase/firestore';
-import type { Acompanhamento, Cotacao } from '../types';
+import type { Acompanhamento, Cotacao, TipoProximaAcao } from '../types';
 
 interface PersistirProximaAcaoCartelaInput {
   acompanhamentoExistente?: Acompanhamento;
   ownerId: string;
   agencyId: string;
   cotacoes: Cotacao[];
-  proximaAcaoEm: Timestamp;
+  tipoProximaAcao?: TipoProximaAcao;
+  proximaAcaoEm: Timestamp | null;
   confirmarMaterializacao: (quantidadeCotacoes: number) => boolean;
   materializar: (input: {
     ownerId: string;
     agencyId: string;
     cotacoes: Cotacao[];
-    proximaAcaoEm: Timestamp;
+    tipoProximaAcao?: TipoProximaAcao;
+    proximaAcaoEm: Timestamp | null;
   }) => Promise<Acompanhamento>;
   atualizar: (input: {
     acompanhamentoId: string;
     ownerId: string;
-    proximaAcaoEm: Timestamp;
+    tipoProximaAcao?: TipoProximaAcao;
+    proximaAcaoEm: Timestamp | null;
   }) => Promise<Acompanhamento>;
 }
 
@@ -31,6 +34,7 @@ export async function persistirProximaAcaoCartela({
   ownerId,
   agencyId,
   cotacoes,
+  tipoProximaAcao,
   proximaAcaoEm,
   confirmarMaterializacao,
   materializar,
@@ -40,6 +44,7 @@ export async function persistirProximaAcaoCartela({
     const acompanhamento = await atualizar({
       acompanhamentoId: acompanhamentoExistente.id,
       ownerId,
+      tipoProximaAcao,
       proximaAcaoEm,
     });
     return { status: 'updated', acompanhamento };
@@ -53,6 +58,7 @@ export async function persistirProximaAcaoCartela({
     ownerId,
     agencyId,
     cotacoes,
+    tipoProximaAcao,
     proximaAcaoEm,
   });
   return { status: 'materialized', acompanhamento };
