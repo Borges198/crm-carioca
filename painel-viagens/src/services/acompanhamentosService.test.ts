@@ -32,6 +32,7 @@ vi.mock('../lib/firebase', () => ({
 }));
 
 import {
+  atualizarProximaAcao,
   listarAcompanhamentosDoUsuario,
   materializarAcompanhamento,
 } from './acompanhamentosService';
@@ -87,15 +88,111 @@ describe('acompanhamentosService', () => {
         { id: 'a', ownerId: 'owner-1' },
         { id: 'b', ownerId: 'owner-1' },
       ],
+      tipoProximaAcao: 'DATA',
       proximaAcaoEm: { seconds: 2, nanoseconds: 0 } as never,
     });
 
     expect(resultado.cotacaoAncoraId).toBe('a');
+    expect(resultado.tipoProximaAcao).toBe('DATA');
     expect(transaction.set).toHaveBeenCalledTimes(1);
     expect(transaction.update).toHaveBeenCalledTimes(3);
     expect(new Set(
       transaction.update.mock.calls.map(([, payload]) => payload.acompanhamentoId)
     ).size).toBe(1);
+  });
+
+  it.each([
+    ['DIARIA', null],
+    ['SEM_DATA', null],
+  ] as const)('materializa o modo %s sem data', async (tipoProximaAcao, proximaAcaoEm) => {
+    const transaction = transacaoComCotacoes({ a: { ownerId: 'owner-1' } });
+    firestore.runTransaction.mockImplementation(async (_db, executar) => executar(transaction));
+
+    const resultado = await materializarAcompanhamento({
+      ownerId: 'owner-1',
+      agencyId: 'agencia-1',
+      cotacoes: [{ id: 'a', ownerId: 'owner-1' }],
+      tipoProximaAcao,
+      proximaAcaoEm,
+    });
+
+    expect(resultado).toEqual(expect.objectContaining({
+      tipoProximaAcao,
+      proximaAcaoEm: null,
+    }));
+    expect(transaction.set).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ tipoProximaAcao, proximaAcaoEm: null })
+    );
+  });
+
+  it.each([
+    ['DATA', null],
+    ['DIARIA', { seconds: 2, nanoseconds: 0 }],
+    ['SEM_DATA', { seconds: 2, nanoseconds: 0 }],
+  ] as const)('rejeita %s com combinação inválida antes da transação', async (
+    tipoProximaAcao,
+    proximaAcaoEm
+  ) => {
+    await expect(materializarAcompanhamento({
+      ownerId: 'owner-1',
+      agencyId: 'agencia-1',
+      cotacoes: [{ id: 'a', ownerId: 'owner-1' }],
+      tipoProximaAcao,
+      proximaAcaoEm: proximaAcaoEm as never,
+    })).rejects.toThrow('Próxima ação');
+
+    expect(firestore.runTransaction).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['DATA', { seconds: 2, nanoseconds: 0 }],
+    ['DIARIA', null],
+    ['SEM_DATA', null],
+  ] as const)('atualiza acompanhamento para o modo %s', async (
+    tipoProximaAcao,
+    proximaAcaoEm
+  ) => {
+    const transaction = transacaoComCotacoes({}, true);
+    transaction.get.mockResolvedValue({
+      exists: () => true,
+      data: () => ({
+        ownerId: 'owner-1',
+        agencyId: 'agencia-1',
+        cotacaoAncoraId: 'a',
+        proximaAcaoEm: null,
+        createdAt: { seconds: 1, nanoseconds: 0 },
+        updatedAt: { seconds: 1, nanoseconds: 0 },
+      }),
+    });
+    firestore.runTransaction.mockImplementation(async (_db, executar) => executar(transaction));
+
+    const resultado = await atualizarProximaAcao({
+      acompanhamentoId: 'acompanhamento-1',
+      ownerId: 'owner-1',
+      tipoProximaAcao,
+      proximaAcaoEm: proximaAcaoEm as never,
+    });
+
+    expect(transaction.update).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ tipoProximaAcao, proximaAcaoEm })
+    );
+    expect(resultado).toEqual(expect.objectContaining({ tipoProximaAcao, proximaAcaoEm }));
+  });
+
+  it('normaliza escrita legada com data para DATA', async () => {
+    const transaction = transacaoComCotacoes({ a: { ownerId: 'owner-1' } });
+    firestore.runTransaction.mockImplementation(async (_db, executar) => executar(transaction));
+
+    const resultado = await materializarAcompanhamento({
+      ownerId: 'owner-1',
+      agencyId: 'agencia-1',
+      cotacoes: [{ id: 'a', ownerId: 'owner-1' }],
+      proximaAcaoEm: { seconds: 2, nanoseconds: 0 } as never,
+    });
+
+    expect(resultado.tipoProximaAcao).toBe('DATA');
   });
 
   it('escolhe a âncora e atualiza documentos somente entre as cotações confirmadas', async () => {
