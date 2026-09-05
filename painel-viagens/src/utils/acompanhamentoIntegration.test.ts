@@ -67,7 +67,8 @@ describe('persistência da próxima ação da cartela', () => {
       ownerId: 'owner-1',
       agencyId: 'agencia-1',
       cotacoes: cotacoesVisiveis,
-      proximaAcaoEm: data,
+      tipoProximaAcao: 'DIARIA',
+      proximaAcaoEm: null,
       confirmarMaterializacao: confirmar,
       materializar,
       atualizar: vi.fn(),
@@ -77,6 +78,8 @@ describe('persistência da próxima ação da cartela', () => {
     expect(confirmar).toHaveBeenCalledWith(2);
     expect(materializar).toHaveBeenCalledWith(expect.objectContaining({
       cotacoes: cotacoesVisiveis,
+      tipoProximaAcao: 'DIARIA',
+      proximaAcaoEm: null,
     }));
     expect(materializar).toHaveBeenCalledTimes(1);
 
@@ -106,7 +109,8 @@ describe('persistência da próxima ação da cartela', () => {
       ownerId: 'owner-1',
       agencyId: 'agencia-1',
       cotacoes: [cotacao('a')],
-      proximaAcaoEm: normalizarDataComercialParaTimestamp('2026-08-29'),
+      tipoProximaAcao: 'SEM_DATA',
+      proximaAcaoEm: null,
       confirmarMaterializacao: confirmar,
       materializar: vi.fn(),
       atualizar,
@@ -114,6 +118,9 @@ describe('persistência da próxima ação da cartela', () => {
 
     expect(resultado.status).toBe('updated');
     expect(confirmar).not.toHaveBeenCalled();
-    expect(atualizar).toHaveBeenCalledTimes(1);
+    expect(atualizar).toHaveBeenCalledWith(expect.objectContaining({
+      tipoProximaAcao: 'SEM_DATA',
+      proximaAcaoEm: null,
+    }));
   });
 });

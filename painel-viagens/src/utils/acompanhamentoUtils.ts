@@ -1,5 +1,5 @@
 import { Timestamp } from 'firebase/firestore';
-import type { Acompanhamento, Cotacao } from '../types';
+import type { Acompanhamento, Cotacao, TipoProximaAcao } from '../types';
 
 function compararIds(a: string, b: string) {
   if (a < b) return -1;
@@ -87,21 +87,60 @@ export type ClassificacaoProximaAcao =
   | 'HOJE'
   | 'PRÓXIMA';
 
-const PRIORIDADE_PROXIMA_ACAO: Record<ClassificacaoProximaAcao, number> = {
+export type ClassificacaoRecorrenciaProximaAcao =
+  | ClassificacaoProximaAcao
+  | 'DIÁRIA'
+  | 'SEM PRÓXIMA AÇÃO';
+
+export type DadosClassificacaoProximaAcao = Pick<
+  Acompanhamento,
+  'tipoProximaAcao' | 'proximaAcaoEm'
+>;
+
+const PRIORIDADE_PROXIMA_ACAO: Record<ClassificacaoRecorrenciaProximaAcao, number> = {
   ATRASADA: 0,
   HOJE: 1,
-  'PRÓXIMA': 2,
-  'NÃO DEFINIDA': 3,
+  'DIÁRIA': 2,
+  'PRÓXIMA': 3,
+  'SEM PRÓXIMA AÇÃO': 4,
+  'NÃO DEFINIDA': 5,
 };
 
 function obterDiaUtc(data: Date) {
   return Date.UTC(data.getUTCFullYear(), data.getUTCMonth(), data.getUTCDate());
 }
 
-export function classificarProximaAcao(
-  proximaAcaoEm: Timestamp | null,
+type ValorClassificacaoProximaAcao = Timestamp | null | DadosClassificacaoProximaAcao;
+
+export function resolverTipoProximaAcao(
+  proximaAcao: DadosClassificacaoProximaAcao
+): TipoProximaAcao | undefined {
+  return proximaAcao.tipoProximaAcao
+    ?? (proximaAcao.proximaAcaoEm ? 'DATA' : undefined);
+}
+
+function decomporProximaAcao(valor: ValorClassificacaoProximaAcao) {
+  if (valor === null || valor instanceof Timestamp) {
+    return {
+      tipoProximaAcao: valor ? 'DATA' as const : undefined,
+      proximaAcaoEm: valor,
+    };
+  }
+
+  return {
+    tipoProximaAcao: resolverTipoProximaAcao(valor),
+    proximaAcaoEm: valor.proximaAcaoEm,
+  };
+}
+
+function classificarValorProximaAcao(
+  valor: ValorClassificacaoProximaAcao,
   hoje = new Date()
-): ClassificacaoProximaAcao {
+): ClassificacaoRecorrenciaProximaAcao {
+  const { tipoProximaAcao, proximaAcaoEm } = decomporProximaAcao(valor);
+
+  if (tipoProximaAcao === 'DIARIA') return 'DIÁRIA';
+  if (tipoProximaAcao === 'SEM_DATA') return 'SEM PRÓXIMA AÇÃO';
   if (!proximaAcaoEm) return 'NÃO DEFINIDA';
 
   const diaProximaAcao = obterDiaUtc(proximaAcaoEm.toDate());
@@ -112,18 +151,43 @@ export function classificarProximaAcao(
   return 'PRÓXIMA';
 }
 
+export function classificarProximaAcao(
+  proximaAcaoEm: Timestamp | null,
+  hoje?: Date
+): ClassificacaoProximaAcao;
+export function classificarProximaAcao(
+  proximaAcao: DadosClassificacaoProximaAcao,
+  hoje?: Date
+): ClassificacaoRecorrenciaProximaAcao;
+export function classificarProximaAcao(
+  valor: ValorClassificacaoProximaAcao,
+  hoje = new Date()
+): ClassificacaoRecorrenciaProximaAcao {
+  return classificarValorProximaAcao(valor, hoje);
+}
+
 export function ordenarPorProximaAcao<T>(
   itens: T[],
-  obterProximaAcaoEm: (item: T) => Timestamp | null,
+  obterProximaAcao: (item: T) => Timestamp | null,
+  hoje?: Date
+): T[];
+export function ordenarPorProximaAcao<T>(
+  itens: T[],
+  obterProximaAcao: (item: T) => DadosClassificacaoProximaAcao,
+  hoje?: Date
+): T[];
+export function ordenarPorProximaAcao<T>(
+  itens: T[],
+  obterProximaAcao: (item: T) => ValorClassificacaoProximaAcao,
   hoje = new Date()
-) {
+): T[] {
   return itens
     .map((item, indiceOriginal) => ({ item, indiceOriginal }))
     .sort((a, b) => {
-      const dataA = obterProximaAcaoEm(a.item);
-      const dataB = obterProximaAcaoEm(b.item);
-      const classificacaoA = classificarProximaAcao(dataA, hoje);
-      const classificacaoB = classificarProximaAcao(dataB, hoje);
+      const valorA = obterProximaAcao(a.item);
+      const valorB = obterProximaAcao(b.item);
+      const classificacaoA = classificarValorProximaAcao(valorA, hoje);
+      const classificacaoB = classificarValorProximaAcao(valorB, hoje);
       const diferencaPrioridade = PRIORIDADE_PROXIMA_ACAO[classificacaoA]
         - PRIORIDADE_PROXIMA_ACAO[classificacaoB];
 
@@ -133,6 +197,9 @@ export function ordenarPorProximaAcao<T>(
         classificacaoA === 'ATRASADA'
         || classificacaoA === 'PRÓXIMA'
       ) {
+        const dataA = decomporProximaAcao(valorA).proximaAcaoEm;
+        const dataB = decomporProximaAcao(valorB).proximaAcaoEm;
+        if (!dataA || !dataB) return a.indiceOriginal - b.indiceOriginal;
         const diferencaData = obterDiaUtc(dataA!.toDate()) - obterDiaUtc(dataB!.toDate());
         if (diferencaData !== 0) return diferencaData;
       }

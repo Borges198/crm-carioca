@@ -8,7 +8,12 @@ import {
   where,
 } from 'firebase/firestore';
 import db from '../lib/firebase';
-import type { Acompanhamento, Cotacao, NovoAcompanhamento } from '../types';
+import type {
+  Acompanhamento,
+  Cotacao,
+  NovoAcompanhamento,
+  TipoProximaAcao,
+} from '../types';
 import {
   montarAcompanhamentoId,
   obterClienteIdConsistente,
@@ -22,17 +27,39 @@ type CotacaoParaMaterializacao = Pick<
   'id' | 'ownerId' | 'clienteId' | 'acompanhamentoId'
 >;
 
-interface MaterializarAcompanhamentoInput {
+interface ProximaAcaoPersistivel {
+  tipoProximaAcao?: TipoProximaAcao;
+  proximaAcaoEm: Timestamp | null;
+}
+
+interface MaterializarAcompanhamentoInput extends ProximaAcaoPersistivel {
   ownerId: string;
   agencyId: string;
   cotacoes: CotacaoParaMaterializacao[];
-  proximaAcaoEm: Timestamp;
 }
 
-interface AtualizarProximaAcaoInput {
+interface AtualizarProximaAcaoInput extends ProximaAcaoPersistivel {
   acompanhamentoId: string;
   ownerId: string;
-  proximaAcaoEm: Timestamp;
+}
+
+function normalizarProximaAcao({
+  tipoProximaAcao,
+  proximaAcaoEm,
+}: ProximaAcaoPersistivel): ProximaAcaoPersistivel {
+  const tipoNormalizado = tipoProximaAcao ?? (proximaAcaoEm ? 'DATA' : undefined);
+
+  if (tipoNormalizado === 'DATA' && !proximaAcaoEm) {
+    throw new Error('Próxima ação DATA exige uma data.');
+  }
+  if (
+    (tipoNormalizado === 'DIARIA' || tipoNormalizado === 'SEM_DATA')
+    && proximaAcaoEm !== null
+  ) {
+    throw new Error(`Próxima ação ${tipoNormalizado} não aceita uma data.`);
+  }
+
+  return { tipoProximaAcao: tipoNormalizado, proximaAcaoEm };
 }
 
 export async function listarAcompanhamentosDoUsuario(ownerId: string) {
@@ -52,8 +79,10 @@ export async function materializarAcompanhamento({
   ownerId,
   agencyId,
   cotacoes,
+  tipoProximaAcao,
   proximaAcaoEm,
 }: MaterializarAcompanhamentoInput) {
+  const proximaAcao = normalizarProximaAcao({ tipoProximaAcao, proximaAcaoEm });
   const owner = ownerId.trim();
   const agency = agencyId.trim();
   const cotacoesUnicas = Array.from(
@@ -102,7 +131,10 @@ export async function materializarAcompanhamento({
       agencyId: agency,
       cotacaoAncoraId,
       ...(clienteId ? { clienteId } : {}),
-      proximaAcaoEm,
+      ...(proximaAcao.tipoProximaAcao
+        ? { tipoProximaAcao: proximaAcao.tipoProximaAcao }
+        : {}),
+      proximaAcaoEm: proximaAcao.proximaAcaoEm,
       createdAt: agora,
       updatedAt: agora,
     };
@@ -122,8 +154,10 @@ export async function materializarAcompanhamento({
 export async function atualizarProximaAcao({
   acompanhamentoId,
   ownerId,
+  tipoProximaAcao,
   proximaAcaoEm,
 }: AtualizarProximaAcaoInput) {
+  const proximaAcao = normalizarProximaAcao({ tipoProximaAcao, proximaAcaoEm });
   const acompanhamentoRef = doc(acompanhamentosCollection, acompanhamentoId);
 
   return runTransaction(db, async (transaction) => {
@@ -138,13 +172,19 @@ export async function atualizarProximaAcao({
     }
 
     const updatedAt = Timestamp.now();
-    transaction.update(acompanhamentoRef, { proximaAcaoEm, updatedAt });
+    const atualizacao = {
+      ...(proximaAcao.tipoProximaAcao
+        ? { tipoProximaAcao: proximaAcao.tipoProximaAcao }
+        : {}),
+      proximaAcaoEm: proximaAcao.proximaAcaoEm,
+      updatedAt,
+    };
+    transaction.update(acompanhamentoRef, atualizacao);
 
     return {
       id: acompanhamentoId,
       ...atual,
-      proximaAcaoEm,
-      updatedAt,
+      ...atualizacao,
     } satisfies Acompanhamento;
   });
 }

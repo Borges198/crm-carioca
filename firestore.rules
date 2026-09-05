@@ -119,6 +119,7 @@ service cloud.firestore {
           "agencyId",
           "cotacaoAncoraId",
           "clienteId",
+          "tipoProximaAcao",
           "proximaAcaoEm",
           "createdAt",
           "updatedAt"
@@ -129,10 +130,7 @@ service cloud.firestore {
           !("clienteId" in request.resource.data)
           || request.resource.data.clienteId is string
         )
-        && (
-          request.resource.data.proximaAcaoEm == null
-          || request.resource.data.proximaAcaoEm is timestamp
-        )
+        && isValidProximaAcao(request.resource.data)
         && request.resource.data.createdAt is timestamp
         && request.resource.data.updatedAt is timestamp
         && existsAfter(
@@ -144,6 +142,21 @@ service cloud.firestore {
         && getAfter(
           /databases/$(database)/documents/cotacoes/$(request.resource.data.cotacaoAncoraId)
         ).data.acompanhamentoId == acompanhamentoId;
+    }
+
+    function isValidProximaAcao(data) {
+      return (
+          !("tipoProximaAcao" in data)
+          && (data.proximaAcaoEm == null || data.proximaAcaoEm is timestamp)
+        )
+        || (
+          "tipoProximaAcao" in data
+          && (
+            (data.tipoProximaAcao == "DATA" && data.proximaAcaoEm is timestamp)
+            || (data.tipoProximaAcao == "DIARIA" && data.proximaAcaoEm == null)
+            || (data.tipoProximaAcao == "SEM_DATA" && data.proximaAcaoEm == null)
+          )
+        );
     }
 
     function supervisorCanUpdateCommercialFields() {
@@ -239,13 +252,11 @@ service cloud.firestore {
       allow update: if isApproved()
         && isOwner()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "tipoProximaAcao",
           "proximaAcaoEm",
           "updatedAt"
         ])
-        && (
-          request.resource.data.proximaAcaoEm == null
-          || request.resource.data.proximaAcaoEm is timestamp
-        )
+        && isValidProximaAcao(request.resource.data)
         && request.resource.data.updatedAt is timestamp;
     }
 
