@@ -105,12 +105,43 @@ export interface LeadOpportunity {
   observacao?: string;
 }
 
-function formatarData(data: Timestamp | string | number | Date | undefined | null) {
-  if (!data) return 'Data não informada';
-  if (typeof (data as Timestamp).toDate === 'function') {
-    return (data as Timestamp).toDate().toLocaleDateString('pt-BR');
+export function formatarData(data: Timestamp | string | number | Date | undefined | null) {
+  if (data === null || typeof data === 'undefined' || data === '') {
+    return 'Data não informada';
   }
-  return new Date(data as string | number | Date).toLocaleDateString('pt-BR');
+
+  if (typeof data === 'string') {
+    const valor = data.trim();
+    if (!valor) return 'Data não informada';
+
+    const formatoBrasileiro = valor.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+    const formatoIso = valor.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const partes = formatoBrasileiro
+      ? [formatoBrasileiro[3], formatoBrasileiro[2], formatoBrasileiro[1]]
+      : formatoIso?.slice(1);
+
+    if (partes) {
+      const [anoTexto, mesTexto, diaTexto] = partes;
+      const ano = Number(anoTexto);
+      const mes = Number(mesTexto);
+      const dia = Number(diaTexto);
+      const ultimoDiaDoMes = new Date(ano, mes, 0).getDate();
+
+      if (mes >= 1 && mes <= 12 && dia >= 1 && dia <= ultimoDiaDoMes) {
+        return `${diaTexto}/${mesTexto}/${anoTexto}`;
+      }
+
+      return 'Data inválida';
+    }
+  }
+
+  const dataConvertida = typeof (data as Timestamp).toDate === 'function'
+    ? (data as Timestamp).toDate()
+    : new Date(data as string | number | Date);
+
+  return Number.isNaN(dataConvertida.getTime())
+    ? 'Data inválida'
+    : dataConvertida.toLocaleDateString('pt-BR');
 }
 
 function formatarValor(valor?: number | null) {

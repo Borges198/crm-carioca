@@ -48,6 +48,7 @@ import {
   agruparCotacoesEmOportunidades,
   atualizarTelefoneCotacaoPorId,
   CLASSIFICACAO_PROXIMA_ACAO_CLASSES,
+  formatarData,
   formatarProximaAcaoNoCard,
   montarDadosPersistenciaProximaAcao,
   obterCotacoesDaCartela,
@@ -66,6 +67,49 @@ import {
 } from './page';
 
 const sourceLeadsPage = readFileSync(new URL('./page.tsx', import.meta.url), 'utf8');
+
+describe('formatação das datas de viagem em Leads', () => {
+  it.each([
+    ['15-09-2026', '15/09/2026'],
+    ['2026-09-15', '15/09/2026'],
+  ])('formata %s sem depender do parser de Date', (entrada, esperado) => {
+    expect(formatarData(entrada)).toBe(esperado);
+  });
+
+  it.each([
+    '31-02-2026',
+    '2026-02-31',
+    'data-invalida',
+  ])('usa fallback seguro para %s', (entrada) => {
+    expect(formatarData(entrada)).toBe('Data inválida');
+    expect(formatarData(entrada)).not.toBe('Invalid Date');
+  });
+
+  it.each([null, undefined, '', '   '])('trata ausência de data: %s', (entrada) => {
+    expect(formatarData(entrada)).toBe('Data não informada');
+  });
+
+  it('mantém a apresentação de Timestamp e Date válidos em pt-BR', () => {
+    const data = new Date(2026, 8, 30, 12);
+    const timestamp = normalizarDataComercialParaTimestamp('2026-09-30');
+
+    expect(formatarData(timestamp)).toBe('30/09/2026');
+    expect(formatarData(data)).toBe('30/09/2026');
+  });
+
+  it('formata dataVolta legada e dataRegistro Timestamp no fluxo do card', () => {
+    const dataRegistro = normalizarDataComercialParaTimestamp('2026-09-30');
+    const oportunidade = agruparCotacoesEmOportunidades([
+      criarCotacao('cotacao-com-datas', {
+        dataVolta: '15-09-2026',
+        dataRegistro,
+      }),
+    ])[0];
+
+    expect(formatarData(oportunidade.dataVolta)).toBe('15/09/2026');
+    expect(formatarData(oportunidade.cotacaoMaisRecente.dataRegistro)).toBe('30/09/2026');
+  });
+});
 
 describe('modos da próxima ação na tela de Leads', () => {
   it('oferece exatamente DATA, DIARIA e SEM_DATA com os rótulos aprovados', () => {
