@@ -20,6 +20,8 @@ export interface SmartPasteTrechoUpdates {
   horaChegadaIda?: string;
   horaSaidaVolta?: string;
   horaChegadaVolta?: string;
+  duracaoIda?: string;
+  duracaoVolta?: string;
   paradasIda?: string;
   paradasVolta?: string;
 }
@@ -38,6 +40,7 @@ export function mapearSmartPasteParaTrecho(
       ...(dados.dataIda ? { dataIda: dados.dataIda } : {}),
       ...(dados.horaSaidaIda ? { horaSaidaIda: dados.horaSaidaIda } : {}),
       ...(dados.horaChegadaIda ? { horaChegadaIda: dados.horaChegadaIda } : {}),
+      ...(dados.duracaoIda ? { duracaoIda: dados.duracaoIda } : {}),
       ...(dados.paradasIda ? { paradasIda: dados.paradasIda } : {}),
     };
   }
@@ -51,6 +54,7 @@ export function mapearSmartPasteParaTrecho(
     ...(dados.dataVolta ? { dataVolta: dados.dataVolta } : dados.dataIda ? { dataVolta: dados.dataIda } : {}),
     ...(dados.horaSaidaVolta ? { horaSaidaVolta: dados.horaSaidaVolta } : dados.horaSaidaIda ? { horaSaidaVolta: dados.horaSaidaIda } : {}),
     ...(dados.horaChegadaVolta ? { horaChegadaVolta: dados.horaChegadaVolta } : dados.horaChegadaIda ? { horaChegadaVolta: dados.horaChegadaIda } : {}),
+    ...(dados.duracaoVolta ? { duracaoVolta: dados.duracaoVolta } : dados.duracaoIda ? { duracaoVolta: dados.duracaoIda } : {}),
     ...(dados.paradasVolta ? { paradasVolta: dados.paradasVolta } : dados.paradasIda ? { paradasVolta: dados.paradasIda } : {}),
   };
 }

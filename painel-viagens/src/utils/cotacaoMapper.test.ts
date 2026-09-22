@@ -131,6 +131,21 @@ describe('montarNovaCotacao - payload persistido', () => {
     expect(payload.taxaEmbarque).toBeUndefined();
   });
 
+  it('prioriza e persiste duracoes explicitas do Smart Paste legado', () => {
+    const cotacao = montarNovaCotacao({
+      ...inputBase,
+      horaSaidaIda: '14:20',
+      horaChegadaIda: '01:00',
+      duracaoIda: '10h 40m',
+      horaSaidaVolta: '11:50',
+      horaChegadaVolta: '00:05',
+      duracaoVolta: '12h 15m',
+    });
+
+    expect(cotacao.duracaoIda).toBe('10h 40m');
+    expect(cotacao.duracaoVolta).toBe('12h 15m');
+  });
+
   it('preserva nulls explicitos de volta em cotacao somente ida por trecho', () => {
     const cotacao = montarNovaCotacao({
       ...inputBase,

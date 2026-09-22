@@ -183,6 +183,21 @@ describe('extrairCandidatosSmartPaste', () => {
     ]);
   });
 
+  it('preserva o financeiro do caso LATAM Manaus/Navegantes futuro', () => {
+    const text = readFileSync(
+      join(fixturesDir, 'latam', 'latam-manaus-navegantes-futuro.txt'),
+      'utf8'
+    );
+    const result = extrairCandidatosSmartPaste(text);
+
+    expect(result.companhia).toBe('Latam');
+    expect(result.candidates.map(({ trecho, rounded }) => ({ trecho, rounded }))).toEqual([
+      { trecho: 'ida', rounded: { pontos: 122, taxa: 56 } },
+      { trecho: 'volta', rounded: { pontos: 38, taxa: 51 } },
+      { trecho: 'total', rounded: { pontos: 160, taxa: 106 } },
+    ]);
+  });
+
   it('mantem multiplas opcoes Azul como candidatos separados por trecho e total', () => {
     const result = extrairCandidatosSmartPaste(`
       Azul Linhas Aereas

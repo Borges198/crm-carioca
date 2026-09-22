@@ -12,6 +12,7 @@ describe('mapearSmartPasteParaTrecho', () => {
       dataIda: '2026-07-28',
       horaSaidaIda: '08:00',
       horaChegadaIda: '10:00',
+      duracaoIda: '2h 00m',
       paradasIda: 'Direto',
     });
 
@@ -24,6 +25,7 @@ describe('mapearSmartPasteParaTrecho', () => {
       dataIda: '2026-07-28',
       horaSaidaIda: '08:00',
       horaChegadaIda: '10:00',
+      duracaoIda: '2h 00m',
       paradasIda: 'Direto',
     });
     expect(updates).not.toHaveProperty('origemVolta');
@@ -43,6 +45,7 @@ describe('mapearSmartPasteParaTrecho', () => {
       dataIda: '2026-08-02',
       horaSaidaIda: '18:00',
       horaChegadaIda: '20:00',
+      duracaoIda: '2h 00m',
       paradasIda: 'Direto',
     });
 
@@ -55,6 +58,7 @@ describe('mapearSmartPasteParaTrecho', () => {
       dataVolta: '2026-08-02',
       horaSaidaVolta: '18:00',
       horaChegadaVolta: '20:00',
+      duracaoVolta: '2h 00m',
       paradasVolta: 'Direto',
     });
     expect(updates).not.toHaveProperty('origem');
@@ -74,6 +78,8 @@ describe('mapearSmartPasteParaTrecho', () => {
       horaChegadaIda: '10:00',
       horaSaidaVolta: '18:00',
       horaChegadaVolta: '20:00',
+      duracaoIda: '2h 00m',
+      duracaoVolta: '12h 15m',
       paradasIda: 'Direto',
       paradasVolta: '1 Parada',
     })).toMatchObject({
@@ -82,6 +88,7 @@ describe('mapearSmartPasteParaTrecho', () => {
       dataVolta: '2026-08-02',
       horaSaidaVolta: '18:00',
       horaChegadaVolta: '20:00',
+      duracaoVolta: '12h 15m',
       paradasVolta: '1 Parada',
     });
   });

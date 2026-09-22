@@ -268,11 +268,92 @@ describe('extrairDadosSmartPaste com fixtures reais', () => {
       horaChegadaIda: '01:00',
       horaSaidaVolta: '11:50',
       horaChegadaVolta: '00:05',
+      duracaoIda: '10h 40m',
+      duracaoVolta: '12h 15m',
       companhia: 'Latam',
       paradasIda: '1 Parada',
       paradasVolta: '1 Parada',
       pontos: '59',
       taxaEmbarque: '115',
     });
+  });
+
+  it('extrai duracoes no formato compacto quando nao ha descricao por extenso', () => {
+    const result = extrairDadosSmartPaste(`
+      08:00 AJU
+      20:00 GIG
+      10 h 40 min.
+      21:00 SDU
+      10:00 AJU
+      12 h 15 min.
+    `);
+
+    expect(result).toMatchObject({
+      duracaoIda: '10h 40m',
+      duracaoVolta: '12h 15m',
+    });
+  });
+
+  it('prioriza datas explicitas futuras no caso LATAM Manaus/Navegantes', () => {
+    const text = readFileSync(
+      join(fixturesDir, 'latam', 'latam-manaus-navegantes-futuro.txt'),
+      'utf8'
+    );
+    const result = extrairDadosSmartPaste(text);
+
+    expect(result).toMatchObject({
+      tipoVoo: 'ida_volta',
+      origem: 'MAO',
+      destino: 'NVT',
+      origemVolta: 'NVT',
+      destinoVolta: 'MAO',
+      dataIda: '2027-01-01',
+      dataVolta: '2027-03-31',
+      horaSaidaIda: '18:00',
+      horaChegadaIda: '09:20',
+      horaSaidaVolta: '14:10',
+      horaChegadaVolta: '02:25',
+      duracaoIda: '14h 20m',
+      duracaoVolta: '13h 15m',
+      pontos: '160',
+      taxaEmbarque: '106',
+    });
+  });
+
+  it('deduplica datas abreviadas e explicitas no ano atual', () => {
+    const anoAtual = new Date().getFullYear();
+    const result = extrairDadosSmartPaste(`
+      Ida 01 de jan.
+      Ida 01 de janeiro de ${anoAtual}
+      Volta 31 de mar.
+      Volta 31 de março de ${anoAtual}
+    `);
+
+    expect(result.dataIda).toBe(`${anoAtual}-01-01`);
+    expect(result.dataVolta).toBe(`${anoAtual}-03-31`);
+  });
+
+  it('deduplica datas abreviadas em favor das explicitas no ano futuro', () => {
+    const anoFuturo = new Date().getFullYear() + 1;
+    const result = extrairDadosSmartPaste(`
+      Ida 01 de jan.
+      Ida 01 de janeiro de ${anoFuturo}
+      Volta 31 de mar.
+      Volta 31 de março de ${anoFuturo}
+    `);
+
+    expect(result.dataIda).toBe(`${anoFuturo}-01-01`);
+    expect(result.dataVolta).toBe(`${anoFuturo}-03-31`);
+  });
+
+  it('mantem o ano atual como fallback para datas apenas abreviadas', () => {
+    const anoAtual = new Date().getFullYear();
+    const result = extrairDadosSmartPaste(`
+      Ida 02 de fev.
+      Volta 03 de mar.
+    `);
+
+    expect(result.dataIda).toBe(`${anoAtual}-02-02`);
+    expect(result.dataVolta).toBe(`${anoAtual}-03-03`);
   });
 });

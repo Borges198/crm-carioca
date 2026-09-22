@@ -1,0 +1,44 @@
+Combine suas milhas + dinheiro para pagar
+
+Ida e volta
+
+Manaus a Navegantes sex., 1 de jan.
+
+Voo de ida em cabine LIGHT. sexta-feira, 1 de janeiro de 2027
+
+Voo com hora de partida 18:00, saindo de Manaus, aeroporto Manaus.
+Hora de chegada 9:20 do dia seguinte na cidade de Navegantes, aeroporto Navegantes.
+Voo 1 parada com duração de 14 horas 20 minutos.
+Preço por passageiro a partir de 121900 milhas.
+Operado pela latam airlines brasil.
+
+18:00 MAO
+1 parada
+14 h 20 min.
+9:20 +1 NVT
+
+LATAM Airlines Brasil
+
+121.900 milhas + BRL 55,20
+
+Navegantes a Manaus qua., 31 de mar.
+
+Voo de volta em cabine LIGHT. quarta-feira, 31 de março de 2027
+
+Voo com hora de partida 14:10, saindo de Navegantes, aeroporto Navegantes.
+Hora de chegada 2:25 do dia seguinte na cidade de Manaus, aeroporto Manaus.
+Voo 1 parada com duração de 13 horas 15 minutos.
+Preço por passageiro a partir de 37150 milhas.
+Operado pela latam airlines brasil.
+
+14:10 NVT
+1 parada
+13 h 15 min.
+2:25 +1 MAO
+
+LATAM Airlines Brasil
+
+37.150 milhas + BRL 50,30
+
+Total:
+159.050 milhas + BRL 105,50

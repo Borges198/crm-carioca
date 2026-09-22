@@ -10,6 +10,8 @@ export interface SmartPasteResultado {
   horaChegadaIda?: string;
   horaSaidaVolta?: string;
   horaChegadaVolta?: string;
+  duracaoIda?: string;
+  duracaoVolta?: string;
   dataIda?: string;
   dataVolta?: string;
   limparDataVolta?: boolean;
@@ -53,6 +55,19 @@ export function extrairDadosSmartPaste(texto: string): SmartPasteResultado {
     resultado.destino = matches[1].aeroporto;
   }
 
+  const duracaoPorExtensoRegex = /dura(?:ç|c)[aã]o\s+de\s+(\d{1,2})\s*horas?\s+(\d{1,2})\s*minutos?/gi;
+  const duracaoCompactaRegex = /(\d{1,2})\s*h\s*(\d{1,2})\s*min\.?/gi;
+  const duracaoMatchesPorExtenso = [...texto.matchAll(duracaoPorExtensoRegex)];
+  const duracaoMatches = duracaoMatchesPorExtenso.length > 0
+    ? duracaoMatchesPorExtenso
+    : [...texto.matchAll(duracaoCompactaRegex)];
+  const duracoes = duracaoMatches.map((match) => (
+    `${parseInt(match[1], 10)}h ${match[2].padStart(2, '0')}m`
+  ));
+
+  if (duracoes.length > 0) resultado.duracaoIda = duracoes[0];
+  if (duracoes.length > 1) resultado.duracaoVolta = duracoes[1];
+
   let datasEncontradas: string[] = [];
   const dateRegex1 = /(\d{2})\/(\d{2})\/(\d{4})/g;
   const matchDates1 = [...texto.matchAll(dateRegex1)];
@@ -68,12 +83,18 @@ export function extrairDadosSmartPaste(texto: string): SmartPasteResultado {
     
     const dateRegexText = /(\d{1,2})\s*de\s*([a-zA-Zç]+)\.?(?:\s*de\s*(\d{4}))?/gi;
     const matchDatesText = [...texto.matchAll(dateRegexText)];
+    const datasComAnoExplicito = new Set(
+      matchDatesText
+        .filter((match) => match[3] && meses[match[2].toLowerCase()])
+        .map((match) => `${match[1].padStart(2, '0')}-${meses[match[2].toLowerCase()]}`)
+    );
     
     matchDatesText.forEach(m => {
         const mesTexto = m[2].toLowerCase();
         if (meses[mesTexto]) {
             const dia = m[1].padStart(2, '0');
             const mes = meses[mesTexto];
+            if (!m[3] && datasComAnoExplicito.has(`${dia}-${mes}`)) return;
             const ano = m[3] || new Date().getFullYear().toString();
             datasEncontradas.push(`${ano}-${mes}-${dia}`);
         }

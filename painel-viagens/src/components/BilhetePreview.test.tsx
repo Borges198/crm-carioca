@@ -128,6 +128,34 @@ describe('BilhetePreview - rotas por trecho', () => {
     expect(html).toContain('2h 00m');
   });
 
+  it('prioriza duracoes explicitas sobre a subtracao dos relogios', () => {
+    const html = renderPreview({
+      horaSaidaIda: '14:20',
+      horaChegadaIda: '01:00',
+      duracaoIda: '9h 40m',
+      horaSaidaVolta: '11:50',
+      horaChegadaVolta: '00:05',
+      duracaoVolta: '11h 15m',
+    });
+
+    expect(html).toContain('9h 40m');
+    expect(html).toContain('11h 15m');
+    expect(html).not.toContain('10h 40m');
+    expect(html).not.toContain('12h 15m');
+  });
+
+  it('mantem o calculo pelos relogios como fallback sem duracao explicita', () => {
+    const html = renderPreview({
+      horaSaidaIda: '08:00',
+      horaChegadaIda: '10:30',
+      horaSaidaVolta: '18:00',
+      horaChegadaVolta: '20:45',
+    });
+
+    expect(html).toContain('2h 30m');
+    expect(html).toContain('2h 45m');
+  });
+
   it('continua sem exibir valores internos da composicao financeira', () => {
     const html = renderPreview({
       origemIda: 'GIG',

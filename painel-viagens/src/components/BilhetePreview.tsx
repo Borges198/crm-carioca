@@ -18,10 +18,12 @@ interface BilhetePreviewProps {
   dataIda: string;
   horaSaidaIda: string;
   horaChegadaIda: string;
+  duracaoIda?: string;
   paradasIda: string;
   dataVolta: string;
   horaSaidaVolta: string;
   horaChegadaVolta: string;
+  duracaoVolta?: string;
   paradasVolta: string;
 }
 
@@ -40,6 +42,7 @@ interface TrechoCardProps {
   destinoTrecho: string;
   horaSaida: string;
   horaChegada: string;
+  duracao?: string;
   paradas: string;
   companhia: string;
   tema: TemaCompanhia;
@@ -108,6 +111,7 @@ function TrechoCard({
   destinoTrecho,
   horaSaida,
   horaChegada,
+  duracao,
   paradas,
   companhia,
   tema,
@@ -138,7 +142,7 @@ function TrechoCard({
           </div>
 
           <div className="text-center">
-            <p className="mb-2 text-[10px] font-bold text-slate-500">{calcularDuracao(horaSaida, horaChegada)}</p>
+            <p className="mb-2 text-[10px] font-bold text-slate-500">{duracao || calcularDuracao(horaSaida, horaChegada)}</p>
             <div className="flex items-center justify-center">
               <span className={`h-2.5 w-2.5 rounded-full ${tema.line}`} />
               <span className="h-0.5 w-6 bg-slate-300" />
@@ -175,10 +179,12 @@ export default function BilhetePreview({
   dataIda,
   horaSaidaIda,
   horaChegadaIda,
+  duracaoIda,
   paradasIda,
   dataVolta,
   horaSaidaVolta,
   horaChegadaVolta,
+  duracaoVolta,
   paradasVolta
 }: BilhetePreviewProps) {
   const companhiaTrechoIda = companhiaIda || companhia;
@@ -237,6 +243,7 @@ export default function BilhetePreview({
           destinoTrecho={rotas.ida.destino}
           horaSaida={horaSaidaIda}
           horaChegada={horaChegadaIda}
+          duracao={duracaoIda}
           paradas={paradasIda}
           companhia={companhiaTrechoIda}
           tema={temaIda}
@@ -250,6 +257,7 @@ export default function BilhetePreview({
             destinoTrecho={rotas.volta?.destino ?? ''}
             horaSaida={horaSaidaVolta}
             horaChegada={horaChegadaVolta}
+            duracao={duracaoVolta}
             paradas={paradasVolta}
             companhia={companhiaTrechoVolta}
             tema={temaVolta}

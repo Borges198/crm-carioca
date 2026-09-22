@@ -91,12 +91,14 @@ export default function Home() {
   const [dataIda, setDataIda] = useState('');
   const [horaSaidaIda, setHoraSaidaIda] = useState('');
   const [horaChegadaIda, setHoraChegadaIda] = useState('');
+  const [duracaoIda, setDuracaoIda] = useState('');
   const [paradasIda, setParadasIda] = useState('Direto');
 
   // Campos de Volta
   const [dataVolta, setDataVolta] = useState('');
   const [horaSaidaVolta, setHoraSaidaVolta] = useState('');
   const [horaChegadaVolta, setHoraChegadaVolta] = useState('');
+  const [duracaoVolta, setDuracaoVolta] = useState('');
   const [paradasVolta, setParadasVolta] = useState('Direto');
 
   const [pontos, setPontos] = useState('');
@@ -202,10 +204,12 @@ export default function Home() {
       if (dadosExtraidos.horaSaidaIda) setHoraSaidaIda(dadosExtraidos.horaSaidaIda);
       if (dadosExtraidos.origem) setOrigem(dadosExtraidos.origem);
       if (dadosExtraidos.horaChegadaIda) setHoraChegadaIda(dadosExtraidos.horaChegadaIda);
+      setDuracaoIda(dadosExtraidos.duracaoIda || '');
       if (dadosExtraidos.destino) setDestino(dadosExtraidos.destino);
       if (dadosExtraidos.horaSaidaVolta) setHoraSaidaVolta(dadosExtraidos.horaSaidaVolta);
       if (dadosExtraidos.origemVolta) setOrigemVolta(dadosExtraidos.origemVolta);
       if (dadosExtraidos.horaChegadaVolta) setHoraChegadaVolta(dadosExtraidos.horaChegadaVolta);
+      setDuracaoVolta(dadosExtraidos.duracaoVolta || '');
       if (dadosExtraidos.destinoVolta) setDestinoVolta(dadosExtraidos.destinoVolta);
       if (dadosExtraidos.dataIda) setDataIda(dadosExtraidos.dataIda);
       if (dadosExtraidos.dataVolta) setDataVolta(dadosExtraidos.dataVolta);
@@ -237,6 +241,7 @@ export default function Home() {
       if (updates.dataIda) setDataIda(updates.dataIda);
       if (updates.horaSaidaIda) setHoraSaidaIda(updates.horaSaidaIda);
       if (updates.horaChegadaIda) setHoraChegadaIda(updates.horaChegadaIda);
+      if (updates.duracaoIda) setDuracaoIda(updates.duracaoIda);
       if (updates.paradasIda) setParadasIda(updates.paradasIda);
       if (updates.origem) setOrigem(updates.origem);
       if (updates.destino) setDestino(updates.destino);
@@ -262,6 +267,7 @@ export default function Home() {
       if (updates.dataVolta) setDataVolta(updates.dataVolta);
       if (updates.horaSaidaVolta) setHoraSaidaVolta(updates.horaSaidaVolta);
       if (updates.horaChegadaVolta) setHoraChegadaVolta(updates.horaChegadaVolta);
+      if (updates.duracaoVolta) setDuracaoVolta(updates.duracaoVolta);
       if (updates.paradasVolta) setParadasVolta(updates.paradasVolta);
       if (updates.origemVolta) setOrigemVolta(updates.origemVolta);
       if (updates.destinoVolta) setDestinoVolta(updates.destinoVolta);
@@ -393,8 +399,10 @@ export default function Home() {
           dataVolta: dataVoltaFormatada,
           horaSaidaIda,
           horaChegadaIda,
+          duracaoIda,
           horaSaidaVolta,
           horaChegadaVolta,
+          duracaoVolta,
           paradasIda,
           paradasVolta,
           qtdPontos,
@@ -512,8 +520,8 @@ export default function Home() {
               destinoIda={destino}
               origemVolta={origemVolta}
               destinoVolta={destinoVolta}
-              tipoVoo={tipoVoo} dataIda={dataIda} horaSaidaIda={horaSaidaIda} horaChegadaIda={horaChegadaIda} paradasIda={paradasIda}
-              dataVolta={dataVolta} horaSaidaVolta={horaSaidaVolta} horaChegadaVolta={horaChegadaVolta} paradasVolta={paradasVolta}
+              tipoVoo={tipoVoo} dataIda={dataIda} horaSaidaIda={horaSaidaIda} horaChegadaIda={horaChegadaIda} duracaoIda={duracaoIda} paradasIda={paradasIda}
+              dataVolta={dataVolta} horaSaidaVolta={horaSaidaVolta} horaChegadaVolta={horaChegadaVolta} duracaoVolta={duracaoVolta} paradasVolta={paradasVolta}
             />
 
             <button onClick={baixarPrint} className="w-full bg-green-600 text-white font-bold py-3 rounded-lg hover:bg-green-700 transition shadow-md flex justify-center items-center gap-2">

@@ -30,6 +30,8 @@ interface MontarNovaCotacaoInput {
   horaChegadaIda: string;
   horaSaidaVolta: string;
   horaChegadaVolta: string;
+  duracaoIda?: string;
+  duracaoVolta?: string;
   paradasIda: string;
   paradasVolta: string;
   qtdPontos: number;
@@ -67,7 +69,7 @@ export function montarNovaCotacao(input: MontarNovaCotacaoInput): NovaCotacao {
   const horaChegadaIda = projecao?.horaChegadaIda ?? input.horaChegadaIda;
   const duracaoIda = projecao
     ? projecao.duracaoIda
-    : calcularDuracao(horaSaidaIda, horaChegadaIda);
+    : input.duracaoIda || calcularDuracao(horaSaidaIda, horaChegadaIda);
   let valorTotal = input.valorTotal;
 
   if (ehSomenteIdaEstruturada) {
@@ -149,6 +151,9 @@ export function montarNovaCotacao(input: MontarNovaCotacaoInput): NovaCotacao {
     if (campoTextoPreenchido(paradasVolta)) {
       novaCotacao.paradasVolta = paradasVolta;
     }
+  }
+  if (!projecao && tipoVoo === 'ida_volta' && campoTextoPreenchido(input.duracaoVolta)) {
+    novaCotacao.duracaoVolta = input.duracaoVolta;
   }
   if (typeof input.pontosIda !== 'undefined') {
     novaCotacao.pontosIda = input.pontosIda;
