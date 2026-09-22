@@ -248,4 +248,31 @@ describe('extrairDadosSmartPaste com fixtures reais', () => {
       taxaEmbarque: '89',
     });
   });
+
+  it('preserva os quatro eventos LATAM quando as chegadas possuem +1', () => {
+    const text = readFileSync(
+      join(fixturesDir, 'latam', 'latam-complexo-mais-um.txt'),
+      'utf8'
+    );
+    const result = extrairDadosSmartPaste(text);
+
+    expect(result).toMatchObject({
+      tipoVoo: 'ida_volta',
+      origem: 'AJU',
+      destino: 'GIG',
+      origemVolta: 'SDU',
+      destinoVolta: 'AJU',
+      dataIda: '2026-11-10',
+      dataVolta: '2026-11-27',
+      horaSaidaIda: '14:20',
+      horaChegadaIda: '01:00',
+      horaSaidaVolta: '11:50',
+      horaChegadaVolta: '00:05',
+      companhia: 'Latam',
+      paradasIda: '1 Parada',
+      paradasVolta: '1 Parada',
+      pontos: '59',
+      taxaEmbarque: '115',
+    });
+  });
 });

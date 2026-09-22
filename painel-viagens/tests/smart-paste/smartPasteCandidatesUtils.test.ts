@@ -156,6 +156,33 @@ describe('extrairCandidatosSmartPaste', () => {
     ]);
   });
 
+  it('preserva o financeiro do caso LATAM complexo com +1', () => {
+    const text = readFileSync(
+      join(fixturesDir, 'latam', 'latam-complexo-mais-um.txt'),
+      'utf8'
+    );
+    const result = extrairCandidatosSmartPaste(text);
+
+    expect(result.companhia).toBe('Latam');
+    expect(result.candidates).toEqual([
+      {
+        trecho: 'ida',
+        raw: { pontos: 32418, taxa: 52.04 },
+        rounded: { pontos: 33, taxa: 53 },
+      },
+      {
+        trecho: 'volta',
+        raw: { pontos: 25735, taxa: 62.62 },
+        rounded: { pontos: 26, taxa: 63 },
+      },
+      {
+        trecho: 'total',
+        raw: { pontos: 58153, taxa: 114.66 },
+        rounded: { pontos: 59, taxa: 115 },
+      },
+    ]);
+  });
+
   it('mantem multiplas opcoes Azul como candidatos separados por trecho e total', () => {
     const result = extrairCandidatosSmartPaste(`
       Azul Linhas Aereas

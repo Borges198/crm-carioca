@@ -24,7 +24,7 @@ export function extrairDadosSmartPaste(texto: string): SmartPasteResultado {
   const resultado: SmartPasteResultado = {};
 
   let matches: Array<{hora: string, aeroporto: string}> = [];
-  const timeAirportRegex = /(\d{1,2}:\d{2})\s*([A-Z]{3})/g; 
+  const timeAirportRegex = /(\d{1,2}:\d{2})\s*(?:\+1\s*)?([A-Z]{3})/g;
   const timeAirportMatches = [...texto.matchAll(timeAirportRegex)];
   
   if (timeAirportMatches.length > 0) {

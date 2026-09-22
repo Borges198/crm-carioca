@@ -1,0 +1,44 @@
+Combine suas milhas + dinheiro para pagar
+
+Ida e volta
+
+Aracaju a Rio de Janeiro ter., 10 de nov.
+
+Voo de ida em cabine LIGHT. terça-feira, 10 de novembro de 2026
+
+Voo com hora de partida 14:20, saindo de Aracaju, aeroporto Aracaju.
+Hora de chegada 1:00 do dia seguinte na cidade de Rio de Janeiro, aeroporto null.
+Voo 1 parada com duração de 10 horas 40 minutos.
+Preço por passageiro a partir de 32418 milhas.
+Operado pela latam airlines brasil.
+
+14:20 AJU
+1 parada
+10 h 40 min.
+1:00 +1 GIG
+
+LATAM Airlines Brasil
+
+32.418 milhas + BRL 52,04
+
+Rio de Janeiro a Aracaju sex., 27 de nov.
+
+Voo de volta em cabine LIGHT. sexta-feira, 27 de novembro de 2026
+
+Voo com hora de partida 11:50, saindo de Rio de Janeiro, aeroporto null.
+Hora de chegada 0:05 do dia seguinte na cidade de Aracaju, aeroporto Aracaju.
+Voo 1 parada com duração de 12 horas 15 minutos.
+Preço por passageiro a partir de 25735 milhas.
+Operado pela latam airlines brasil.
+
+11:50 SDU
+1 parada
+12 h 15 min.
+0:05 +1 AJU
+
+LATAM Airlines Brasil
+
+25.735 milhas + BRL 62,62
+
+Total:
+58.153 milhas + BRL 114,66
