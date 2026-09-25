@@ -22,6 +22,37 @@ export interface SmartPasteResultado {
   taxaEmbarque?: string;
 }
 
+const paradaRegex = /(direto|[0-2]\s*(?:conex(?:ão|ões|ao|oes)|paradas?))/i;
+
+function formatarParada(parada: string) {
+  if (/direto|0/i.test(parada)) return "Direto";
+  if (/1/i.test(parada)) return "1 Parada";
+  if (/2/i.test(parada)) return "2 Paradas";
+  return "Direto";
+}
+
+function encontrarInicioSecao(texto: string, sentido: 'ida' | 'volta') {
+  const marcadores = [
+    new RegExp(`^\\s*${sentido}\\s*$`, 'im'),
+    new RegExp(`^\\s*voo\\s+de\\s+${sentido}\\b`, 'im'),
+  ];
+  const indices = marcadores
+    .map((marcador) => marcador.exec(texto)?.index)
+    .filter((indice): indice is number => indice !== undefined);
+
+  return indices.length > 0 ? Math.min(...indices) : undefined;
+}
+
+function extrairParadaDaSecao(secao: string) {
+  const descricaoExtensa = new RegExp(
+    `\\bvoo\\s+${paradaRegex.source}(?=\\s+com\\s+dura(?:ç|c)[aã]o\\b)`,
+    'i'
+  ).exec(secao);
+  const parada = descricaoExtensa?.[1] ?? paradaRegex.exec(secao)?.[1];
+
+  return parada ? formatarParada(parada) : undefined;
+}
+
 export function extrairDadosSmartPaste(texto: string): SmartPasteResultado {
   const resultado: SmartPasteResultado = {};
 
@@ -123,19 +154,21 @@ export function extrairDadosSmartPaste(texto: string): SmartPasteResultado {
   else if (/smiles|gol/i.test(texto)) resultado.companhia = "GOL";
   else if (/latam/i.test(texto)) resultado.companhia = "Latam";
 
-  const paradasMatches = [...texto.matchAll(/(direto|1\s*conexão|1\s*conexao|1\s*parada|2\s*conexões|2\s*conexoes|2\s*paradas)/gi)];
-  const formatParada = (p: string) => {
-     if (/direto/i.test(p)) return "Direto";
-     if (/1/i.test(p)) return "1 Parada";
-     if (/2/i.test(p)) return "2 Paradas";
-     return "Direto";
-  };
+  const inicioIda = encontrarInicioSecao(texto, 'ida');
+  const inicioVolta = encontrarInicioSecao(texto, 'volta');
 
-  if (paradasMatches.length >= 2) {
-     resultado.paradasIda = formatParada(paradasMatches[0][0]);
-     resultado.paradasVolta = formatParada(paradasMatches[1][0]);
-  } else if (paradasMatches.length === 1) {
-     resultado.paradasIda = formatParada(paradasMatches[0][0]);
+  if (inicioIda !== undefined && inicioVolta !== undefined && inicioIda < inicioVolta) {
+    resultado.paradasIda = extrairParadaDaSecao(texto.slice(inicioIda, inicioVolta));
+    resultado.paradasVolta = extrairParadaDaSecao(texto.slice(inicioVolta));
+  } else {
+    const paradasMatches = [...texto.matchAll(new RegExp(paradaRegex.source, 'gi'))];
+
+    if (paradasMatches.length >= 2) {
+      resultado.paradasIda = formatarParada(paradasMatches[0][0]);
+      resultado.paradasVolta = formatarParada(paradasMatches[1][0]);
+    } else if (paradasMatches.length === 1) {
+      resultado.paradasIda = formatarParada(paradasMatches[0][0]);
+    }
   }
 
   const pontosRegex = /(\d{1,3}[.,]?\d{3}|\d{4,6})(?=\s*pts|\s*pontos|\s*milhas)/gi;

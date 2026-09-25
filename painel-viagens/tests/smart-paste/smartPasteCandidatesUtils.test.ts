@@ -198,6 +198,21 @@ describe('extrairCandidatosSmartPaste', () => {
     ]);
   });
 
+  it('preserva o financeiro do caso internacional LATAM com paradas diferentes por sentido', () => {
+    const text = readFileSync(
+      join(fixturesDir, 'latam', 'latam-internacional-paradas-2-1.txt'),
+      'utf8'
+    );
+    const result = extrairCandidatosSmartPaste(text);
+
+    expect(result.companhia).toBe('Latam');
+    expect(result.candidates.map(({ trecho, rounded }) => ({ trecho, rounded }))).toEqual([
+      { trecho: 'ida', rounded: { pontos: 79, taxa: 184 } },
+      { trecho: 'volta', rounded: { pontos: 51, taxa: 282 } },
+      { trecho: 'total', rounded: { pontos: 130, taxa: 465 } },
+    ]);
+  });
+
   it('mantem multiplas opcoes Azul como candidatos separados por trecho e total', () => {
     const result = extrairCandidatosSmartPaste(`
       Azul Linhas Aereas

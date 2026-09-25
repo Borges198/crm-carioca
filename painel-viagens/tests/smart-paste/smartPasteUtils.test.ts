@@ -278,6 +278,77 @@ describe('extrairDadosSmartPaste com fixtures reais', () => {
     });
   });
 
+  it('resolve paradas por sentido no caso internacional LATAM sem deduplicar por valor', () => {
+    const text = readFileSync(
+      join(fixturesDir, 'latam', 'latam-internacional-paradas-2-1.txt'),
+      'utf8'
+    );
+    const result = extrairDadosSmartPaste(text);
+
+    expect(result).toMatchObject({
+      tipoVoo: 'ida_volta',
+      origem: 'GRU',
+      destino: 'CTG',
+      origemVolta: 'CTG',
+      destinoVolta: 'GRU',
+      dataIda: '2027-01-01',
+      dataVolta: '2027-03-31',
+      horaSaidaIda: '06:30',
+      horaChegadaIda: '11:50',
+      horaSaidaVolta: '17:20',
+      horaChegadaVolta: '16:25',
+      duracaoIda: '31h 20m',
+      duracaoVolta: '21h 05m',
+      paradasIda: '2 Paradas',
+      paradasVolta: '1 Parada',
+      pontos: '130',
+      taxaEmbarque: '465',
+    });
+  });
+
+  it.each([
+    ['1 parada', '1 parada', '1 Parada', '1 Parada'],
+    ['0 paradas', '1 parada', 'Direto', '1 Parada'],
+  ])(
+    'mantem paradas independentes por sentido: ida %s e volta %s',
+    (paradaIda, paradaVolta, esperadoIda, esperadoVolta) => {
+      const result = extrairDadosSmartPaste(`
+        IDA
+        Voo ${paradaIda} com duração de 2 horas 10 minutos.
+        08:00 GRU
+        ${paradaIda}
+        10:10 GIG
+
+        VOLTA
+        Voo ${paradaVolta} com duração de 3 horas 20 minutos.
+        18:00 GIG
+        ${paradaVolta}
+        21:20 GRU
+      `);
+
+      expect(result.paradasIda).toBe(esperadoIda);
+      expect(result.paradasVolta).toBe(esperadoVolta);
+    }
+  );
+
+  it('prioriza a descricao extensa e usa a linha compacta apenas como fallback do sentido', () => {
+    const result = extrairDadosSmartPaste(`
+      IDA
+      Voo 2 paradas com duração de 8 horas 10 minutos.
+      08:00 GRU
+      1 parada
+      16:10 CTG
+
+      VOLTA
+      17:20 CTG
+      1 parada
+      21:05 GRU
+    `);
+
+    expect(result.paradasIda).toBe('2 Paradas');
+    expect(result.paradasVolta).toBe('1 Parada');
+  });
+
   it('extrai duracoes no formato compacto quando nao ha descricao por extenso', () => {
     const result = extrairDadosSmartPaste(`
       08:00 AJU

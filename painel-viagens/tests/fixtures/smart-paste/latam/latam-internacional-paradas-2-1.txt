@@ -1,0 +1,44 @@
+Combine suas milhas + dinheiro para pagar
+
+Ida e volta
+
+São Paulo a Cartagena sex., 1 de jan.
+
+Voo de ida em cabine LIGHT. sexta-feira, 1 de janeiro de 2027
+
+Voo com hora de partida 6:30, saindo de São Paulo, aeroporto Guarulhos.
+Hora de chegada 11:50 na cidade de Cartagena, aeroporto Rafael Núñez.
+Voo 2 paradas com duração de 31 horas 20 minutos.
+Preço por passageiro a partir de 78100 milhas.
+Operado pela latam airlines brasil.
+
+6:30 GRU
+2 Paradas
+31 h 20 min.
+11:50 CTG
+
+LATAM Airlines Brasil
+
+78.100 milhas + BRL 183,10
+
+Cartagena a São Paulo qua., 31 de mar.
+
+Voo de volta em cabine LIGHT. quarta-feira, 31 de março de 2027
+
+Voo com hora de partida 17:20, saindo de Cartagena, aeroporto Rafael Núñez.
+Hora de chegada 16:25 do dia seguinte na cidade de São Paulo, aeroporto Guarulhos.
+Voo 1 parada com duração de 21 horas 5 minutos.
+Preço por passageiro a partir de 50100 milhas.
+Operado pela latam airlines brasil.
+
+17:20 CTG
+1 Parada
+21 h 05 min.
+16:25 +1 GRU
+
+LATAM Airlines Brasil
+
+50.100 milhas + BRL 281,10
+
+Total:
+129.100 milhas + BRL 464,10
