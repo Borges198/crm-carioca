@@ -54,10 +54,10 @@ export default function MainNav() {
           </p>
         </Link>
 
-        <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+        <div className="relative min-w-0 flex flex-col gap-2 lg:flex-row lg:items-center">
           <AccessProfileBadge />
 
-          <nav aria-label="Navegação principal" className="flex gap-2 overflow-x-auto pb-1 lg:pb-0">
+          <nav aria-label="Navegação principal" className="flex gap-2 overflow-x-auto pb-1 pr-10 sm:pr-0 lg:pb-0">
             {navItems.map((item) => {
               const isActive = pathname === item.href;
 
@@ -85,6 +85,10 @@ export default function MainNav() {
               {isSigningOut ? "Saindo..." : "Sair"}
             </button>
           </nav>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute right-0 bottom-0 h-11 w-10 bg-linear-to-l from-white via-white/80 to-transparent sm:hidden"
+          />
         </div>
       </div>
     </header>

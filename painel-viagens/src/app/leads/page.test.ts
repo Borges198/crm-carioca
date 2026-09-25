@@ -1,14 +1,25 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
-import type { Cotacao } from '../../types';
+import type { Acompanhamento, Cotacao } from '../../types';
 import { filterBySearch } from '../../utils/searchUtils';
+import { normalizarDataComercialParaTimestamp } from '../../utils/acompanhamentoUtils';
 
 const clientesService = vi.hoisted(() => ({
   atualizarCliente: vi.fn(),
 }));
 
 vi.mock('firebase/firestore', () => ({
-  Timestamp: class Timestamp {},
+  Timestamp: class Timestamp {
+    constructor(private readonly value = new Date(0)) {}
+
+    static fromDate(value: Date) {
+      return new this(value);
+    }
+
+    toDate() {
+      return this.value;
+    }
+  },
 }));
 
 vi.mock('../../context/AuthContext', () => ({
@@ -26,15 +37,28 @@ vi.mock('../../services/cotacoesService', () => ({
   listarCotacoesDoUsuario: vi.fn(),
 }));
 
+vi.mock('../../services/acompanhamentosService', () => ({
+  atualizarProximaAcao: vi.fn(),
+  listarAcompanhamentosDoUsuario: vi.fn(),
+  materializarAcompanhamento: vi.fn(),
+}));
+
 import {
   avancarIdentidadeSessaoLeads,
   agruparCotacoesEmOportunidades,
   atualizarTelefoneCotacaoPorId,
+  CLASSIFICACAO_PROXIMA_ACAO_CLASSES,
+  formatarData,
+  formatarProximaAcaoNoCard,
+  montarDadosPersistenciaProximaAcao,
+  obterCotacoesDaCartela,
   identidadeSessaoLeadsCorresponde,
   montarCamposPesquisaOportunidade,
   montarChaveOportunidade,
   montarDadosViagemCotacao,
   montarPayloadTelefoneCotacao,
+  OPCOES_TIPO_PROXIMA_ACAO,
+  ordenarOportunidadesPorProximaAcao,
   podeIniciarEdicaoTelefone,
   persistirTelefoneCotacao,
   sessaoPodeMutarLeads,
@@ -43,6 +67,158 @@ import {
 } from './page';
 
 const sourceLeadsPage = readFileSync(new URL('./page.tsx', import.meta.url), 'utf8');
+
+describe('formatação das datas de viagem em Leads', () => {
+  it.each([
+    ['15-09-2026', '15/09/2026'],
+    ['2026-09-15', '15/09/2026'],
+  ])('formata %s sem depender do parser de Date', (entrada, esperado) => {
+    expect(formatarData(entrada)).toBe(esperado);
+  });
+
+  it.each([
+    '31-02-2026',
+    '2026-02-31',
+    'data-invalida',
+  ])('usa fallback seguro para %s', (entrada) => {
+    expect(formatarData(entrada)).toBe('Data inválida');
+    expect(formatarData(entrada)).not.toBe('Invalid Date');
+  });
+
+  it.each([null, undefined, '', '   '])('trata ausência de data: %s', (entrada) => {
+    expect(formatarData(entrada)).toBe('Data não informada');
+  });
+
+  it('mantém a apresentação de Timestamp e Date válidos em pt-BR', () => {
+    const data = new Date(2026, 8, 30, 12);
+    const timestamp = normalizarDataComercialParaTimestamp('2026-09-30');
+
+    expect(formatarData(timestamp)).toBe('30/09/2026');
+    expect(formatarData(data)).toBe('30/09/2026');
+  });
+
+  it('formata dataVolta legada e dataRegistro Timestamp no fluxo do card', () => {
+    const dataRegistro = normalizarDataComercialParaTimestamp('2026-09-30');
+    const oportunidade = agruparCotacoesEmOportunidades([
+      criarCotacao('cotacao-com-datas', {
+        dataVolta: '15-09-2026',
+        dataRegistro,
+      }),
+    ])[0];
+
+    expect(formatarData(oportunidade.dataVolta)).toBe('15/09/2026');
+    expect(formatarData(oportunidade.cotacaoMaisRecente.dataRegistro)).toBe('30/09/2026');
+  });
+});
+
+describe('modos da próxima ação na tela de Leads', () => {
+  it('oferece exatamente DATA, DIARIA e SEM_DATA com os rótulos aprovados', () => {
+    expect(OPCOES_TIPO_PROXIMA_ACAO).toEqual([
+      { value: 'DATA', label: 'Escolher uma data' },
+      { value: 'DIARIA', label: 'Diariamente' },
+      { value: 'SEM_DATA', label: 'Sem próxima ação no momento' },
+    ]);
+    expect(sourceLeadsPage).toContain('type="radio"');
+  });
+
+  it('seleciona DATA e prepara data válida para salvar', () => {
+    const dados = montarDadosPersistenciaProximaAcao('DATA', '2026-08-28');
+
+    expect(dados.tipoProximaAcao).toBe('DATA');
+    expect(dados.proximaAcaoEm?.toDate().toISOString()).toBe('2026-08-28T12:00:00.000Z');
+  });
+
+  it.each([
+    ['DIARIA', ''],
+    ['SEM_DATA', 'data ignorada'],
+  ] as const)('seleciona %s e prepara null para salvar sem exigir data', (tipo, data) => {
+    expect(montarDadosPersistenciaProximaAcao(tipo, data)).toEqual({
+      tipoProximaAcao: tipo,
+      proximaAcaoEm: null,
+    });
+  });
+
+  it('DATA exige data válida', () => {
+    expect(() => montarDadosPersistenciaProximaAcao('DATA', '')).toThrow(
+      'Data comercial inválida'
+    );
+    expect(sourceLeadsPage).toContain("editTipoProximaAcao === 'DATA'");
+    expect(sourceLeadsPage).toContain('required');
+  });
+
+  it('permite mudar entre os três modos sem reaproveitar data fora de DATA', () => {
+    const data = montarDadosPersistenciaProximaAcao('DATA', '2026-08-28');
+    const diaria = montarDadosPersistenciaProximaAcao('DIARIA', '2026-08-28');
+    const semData = montarDadosPersistenciaProximaAcao('SEM_DATA', '2026-08-28');
+
+    expect(data.proximaAcaoEm).not.toBeNull();
+    expect(diaria.proximaAcaoEm).toBeNull();
+    expect(semData.proximaAcaoEm).toBeNull();
+  });
+
+  it('mantém a apresentação legada com e sem data', () => {
+    expect(formatarProximaAcaoNoCard({
+      proximaAcaoEm: normalizarDataComercialParaTimestamp('2026-08-28'),
+    })).toBe('28/08/2026');
+    expect(formatarProximaAcaoNoCard({ proximaAcaoEm: null })).toBe('Não definida');
+  });
+
+  it('disponibiliza os rótulos dos seis estados nos cards', () => {
+    expect(Object.keys(CLASSIFICACAO_PROXIMA_ACAO_CLASSES)).toEqual(expect.arrayContaining([
+      'ATRASADA',
+      'HOJE',
+      'DIÁRIA',
+      'PRÓXIMA',
+      'SEM PRÓXIMA AÇÃO',
+      'NÃO DEFINIDA',
+    ]));
+    expect(formatarProximaAcaoNoCard({
+      tipoProximaAcao: 'DIARIA',
+      proximaAcaoEm: null,
+    })).toBe('DIÁRIA');
+    expect(formatarProximaAcaoNoCard({
+      tipoProximaAcao: 'SEM_DATA',
+      proximaAcaoEm: null,
+    })).toBe('SEM PRÓXIMA AÇÃO');
+  });
+
+  it('ordena visualmente os seis grupos pelo contrato do 3A', () => {
+    const modos = [
+      ['nao-definida', undefined, null],
+      ['sem-data', 'SEM_DATA', null],
+      ['proxima', 'DATA', '2026-08-29'],
+      ['diaria', 'DIARIA', null],
+      ['hoje', 'DATA', '2026-08-28'],
+      ['atrasada', 'DATA', '2026-08-27'],
+    ] as const;
+    const oportunidades = modos.map(([id]) => agruparCotacoesEmOportunidades([
+      criarCotacao(id, { acompanhamentoId: id, telefoneNormalizado: id }),
+    ])[0]);
+    const acompanhamentos = modos.map(([id, tipoProximaAcao, data]) => ({
+      id,
+      ownerId: 'usuario-1',
+      agencyId: 'agencia-1',
+      cotacaoAncoraId: id,
+      tipoProximaAcao,
+      proximaAcaoEm: data ? normalizarDataComercialParaTimestamp(data) : null,
+      createdAt: normalizarDataComercialParaTimestamp('2026-08-01'),
+      updatedAt: normalizarDataComercialParaTimestamp('2026-08-01'),
+    })) satisfies Acompanhamento[];
+
+    expect(ordenarOportunidadesPorProximaAcao(
+      oportunidades,
+      acompanhamentos,
+      new Date('2026-08-28T18:00:00.000Z')
+    ).map((oportunidade) => oportunidade.cotacoes[0].acompanhamentoId)).toEqual([
+      'atrasada',
+      'hoje',
+      'diaria',
+      'proxima',
+      'sem-data',
+      'nao-definida',
+    ]);
+  });
+});
 
 function criarCotacao(id: string, overrides: Partial<Cotacao> = {}): Cotacao {
   return {
@@ -210,6 +386,82 @@ describe('agrupamento de oportunidades em leads', () => {
 
     expect(oportunidades).toHaveLength(1);
     expect(oportunidades[0].cotacoes).toHaveLength(2);
+  });
+
+  it('prioriza acompanhamentoId sobre clienteId, telefone e nome', () => {
+    const oportunidades = agruparCotacoesEmOportunidades([
+      criarCotacao('1', {
+        acompanhamentoId: 'acompanhamento-1',
+        clienteId: 'cliente-1',
+      }),
+      criarCotacao('2', {
+        acompanhamentoId: 'acompanhamento-1',
+        clienteId: 'cliente-2',
+        cliente: 'Outro nome',
+        telefoneNormalizado: '11111111111',
+      }),
+    ]);
+
+    expect(oportunidades).toHaveLength(1);
+    expect(oportunidades[0].id).toContain('acompanhamento:acompanhamento-1');
+  });
+
+  it('separa oportunidades persistentes diferentes da mesma pessoa', () => {
+    const oportunidades = agruparCotacoesEmOportunidades([
+      criarCotacao('1', {
+        acompanhamentoId: 'acompanhamento-1',
+        clienteId: 'cliente-1',
+      }),
+      criarCotacao('2', {
+        acompanhamentoId: 'acompanhamento-2',
+        clienteId: 'cliente-1',
+      }),
+      criarCotacao('3', { clienteId: 'cliente-1' }),
+    ]);
+
+    expect(oportunidades).toHaveLength(3);
+  });
+
+  it('troca de representante ou subconjunto filtrado não muda a identidade persistente', () => {
+    const antiga = criarCotacao('antiga', {
+      acompanhamentoId: 'acompanhamento-1',
+      dataRegistro: '2026-06-01',
+    });
+    const recente = criarCotacao('recente', {
+      acompanhamentoId: 'acompanhamento-1',
+      dataRegistro: '2026-07-01',
+    });
+
+    expect(montarChaveOportunidade(antiga)).toBe(montarChaveOportunidade(recente));
+    expect(agruparCotacoesEmOportunidades([antiga])[0].id).toBe(
+      agruparCotacoesEmOportunidades([recente])[0].id
+    );
+  });
+
+  it('materialização usa somente as cotações visíveis na cartela filtrada', () => {
+    const aguardandoA = criarCotacao('a', {
+      clienteId: 'cliente-1',
+      leadStatus: 'aguardando_cliente',
+    });
+    const aguardandoB = criarCotacao('b', {
+      clienteId: 'cliente-1',
+      leadStatus: 'aguardando_cliente',
+    });
+    const fechadaOculta = criarCotacao('c', {
+      clienteId: 'cliente-1',
+      leadStatus: 'fechado',
+    });
+    const cotacoesGlobais = [aguardandoA, aguardandoB, fechadaOculta];
+    const cotacoesVisiveis = cotacoesGlobais.filter(
+      (cotacao) => cotacao.leadStatus === 'aguardando_cliente'
+    );
+    const oportunidadeVisivel = agruparCotacoesEmOportunidades(cotacoesVisiveis)[0];
+
+    const cotacoesParaMaterializar = obterCotacoesDaCartela(oportunidadeVisivel);
+
+    expect(cotacoesParaMaterializar.map((cotacao) => cotacao.id)).toEqual(['a', 'b']);
+    expect(cotacoesParaMaterializar).not.toBe(oportunidadeVisivel.cotacoes);
+    expect(cotacoesParaMaterializar).not.toContain(fechadaOculta);
   });
 });
 
@@ -457,6 +709,22 @@ describe('edição segura de telefone em leads', () => {
 });
 
 describe('reagrupamento após edição', () => {
+  it('editar telefone preserva acompanhamentoId e a identidade materializada', () => {
+    const vinculada = criarCotacao('1', {
+      acompanhamentoId: 'acompanhamento-1',
+    });
+    const [atualizada] = atualizarTelefoneCotacaoPorId(
+      [vinculada],
+      '1',
+      '(82) 97777-3333'
+    );
+
+    expect(atualizada.acompanhamentoId).toBe('acompanhamento-1');
+    expect(montarChaveOportunidade(atualizada)).toBe(
+      montarChaveOportunidade(vinculada)
+    );
+  });
+
   it('divide um grupo sem alterar a quantidade total de cotações', () => {
     const cotacoes = [criarCotacao('1'), criarCotacao('2')];
     const atualizadas = atualizarTelefoneCotacaoPorId(cotacoes, '1', '82977773333');

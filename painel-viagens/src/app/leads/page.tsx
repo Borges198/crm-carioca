@@ -8,8 +8,13 @@ import SearchInput from '../../components/SearchInput';
 import { useAuth } from '../../context/AuthContext';
 import { criarCliente, listarClientesDoUsuario } from '../../services/clientesService';
 import { atualizarCotacao, listarCotacoesDoUsuario } from '../../services/cotacoesService';
+import {
+  atualizarProximaAcao,
+  listarAcompanhamentosDoUsuario,
+  materializarAcompanhamento,
+} from '../../services/acompanhamentosService';
 import { DEFAULT_AGENCY_ID } from '../../types';
-import type { Cotacao } from '../../types';
+import type { Acompanhamento, Cotacao, TipoProximaAcao } from '../../types';
 import {
   LEAD_STATUS_OPTIONS,
   formatarLeadStatus,
@@ -22,9 +27,62 @@ import {
   normalizarTelefoneCliente,
 } from '../../utils/clienteConversionUtils';
 import { filterBySearch, normalizeSearchText } from '../../utils/searchUtils';
+import {
+  atualizarAcompanhamentoLocalmente,
+  classificarProximaAcao,
+  formatarDataComercial,
+  formatarDataComercialParaInput,
+  normalizarDataComercialParaTimestamp,
+  ordenarPorProximaAcao,
+  resolverTipoProximaAcao,
+  vincularCotacoesLocalmente,
+  type ClassificacaoRecorrenciaProximaAcao,
+} from '../../utils/acompanhamentoUtils';
+import { persistirProximaAcaoCartela } from '../../utils/acompanhamentoIntegration';
 
 type FiltroStatus = 'abertos' | 'sem_status' | LeadStatus;
 export const TEXTO_ORIENTATIVO_LEADS_LEITURA_COMERCIAL = 'Leads é uma visão de acompanhamento por cliente. Para alterar status, produtos ou observações de uma cotação, use o Histórico.';
+
+export const OPCOES_TIPO_PROXIMA_ACAO = [
+  { value: 'DATA', label: 'Escolher uma data' },
+  { value: 'DIARIA', label: 'Diariamente' },
+  { value: 'SEM_DATA', label: 'Sem próxima ação no momento' },
+] as const satisfies ReadonlyArray<{ value: TipoProximaAcao; label: string }>;
+
+export const CLASSIFICACAO_PROXIMA_ACAO_CLASSES: Record<
+  ClassificacaoRecorrenciaProximaAcao,
+  string
+> = {
+  'NÃO DEFINIDA': 'border-slate-200 bg-slate-100 text-slate-600',
+  ATRASADA: 'border-red-200 bg-red-100 text-red-700',
+  HOJE: 'border-amber-300 bg-amber-100 text-amber-800',
+  'DIÁRIA': 'border-violet-200 bg-violet-100 text-violet-700',
+  'PRÓXIMA': 'border-blue-200 bg-blue-100 text-blue-700',
+  'SEM PRÓXIMA AÇÃO': 'border-slate-200 bg-white text-slate-600',
+};
+
+export function montarDadosPersistenciaProximaAcao(
+  tipoProximaAcao: TipoProximaAcao,
+  data: string
+) {
+  return {
+    tipoProximaAcao,
+    proximaAcaoEm: tipoProximaAcao === 'DATA'
+      ? normalizarDataComercialParaTimestamp(data)
+      : null,
+  };
+}
+
+export function formatarProximaAcaoNoCard(
+  acompanhamento?: Pick<Acompanhamento, 'tipoProximaAcao' | 'proximaAcaoEm'>
+) {
+  if (!acompanhamento) return formatarDataComercial(null);
+  const classificacao = classificarProximaAcao(acompanhamento);
+  if (classificacao === 'DIÁRIA' || classificacao === 'SEM PRÓXIMA AÇÃO') {
+    return classificacao;
+  }
+  return formatarDataComercial(acompanhamento.proximaAcaoEm);
+}
 
 type CotacaoComHorariosVolta = Cotacao & {
   horaSaidaVolta?: string;
@@ -47,12 +105,43 @@ export interface LeadOpportunity {
   observacao?: string;
 }
 
-function formatarData(data: Timestamp | string | number | Date | undefined | null) {
-  if (!data) return 'Data não informada';
-  if (typeof (data as Timestamp).toDate === 'function') {
-    return (data as Timestamp).toDate().toLocaleDateString('pt-BR');
+export function formatarData(data: Timestamp | string | number | Date | undefined | null) {
+  if (data === null || typeof data === 'undefined' || data === '') {
+    return 'Data não informada';
   }
-  return new Date(data as string | number | Date).toLocaleDateString('pt-BR');
+
+  if (typeof data === 'string') {
+    const valor = data.trim();
+    if (!valor) return 'Data não informada';
+
+    const formatoBrasileiro = valor.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+    const formatoIso = valor.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const partes = formatoBrasileiro
+      ? [formatoBrasileiro[3], formatoBrasileiro[2], formatoBrasileiro[1]]
+      : formatoIso?.slice(1);
+
+    if (partes) {
+      const [anoTexto, mesTexto, diaTexto] = partes;
+      const ano = Number(anoTexto);
+      const mes = Number(mesTexto);
+      const dia = Number(diaTexto);
+      const ultimoDiaDoMes = new Date(ano, mes, 0).getDate();
+
+      if (mes >= 1 && mes <= 12 && dia >= 1 && dia <= ultimoDiaDoMes) {
+        return `${diaTexto}/${mesTexto}/${anoTexto}`;
+      }
+
+      return 'Data inválida';
+    }
+  }
+
+  const dataConvertida = typeof (data as Timestamp).toDate === 'function'
+    ? (data as Timestamp).toDate()
+    : new Date(data as string | number | Date);
+
+  return Number.isNaN(dataConvertida.getTime())
+    ? 'Data inválida'
+    : dataConvertida.toLocaleDateString('pt-BR');
 }
 
 function formatarValor(valor?: number | null) {
@@ -78,6 +167,11 @@ function getTime(data: Cotacao['dataRegistro']) {
 
 export function montarChaveOportunidade(cotacao: Cotacao) {
   const ownerId = cotacao.ownerId?.trim() || 'sem_owner';
+  const acompanhamentoId = cotacao.acompanhamentoId?.trim();
+  if (acompanhamentoId) {
+    return `owner:${ownerId}|acompanhamento:${acompanhamentoId}`;
+  }
+
   const clienteId = cotacao.clienteId?.trim();
   if (clienteId) return `owner:${ownerId}|cliente:${clienteId}`;
 
@@ -154,6 +248,43 @@ export function agruparCotacoesEmOportunidades(cotacoes: Cotacao[]): LeadOpportu
       };
     })
     .sort((a, b) => ordenarPorRegistroMaisRecente(a.cotacaoMaisRecente, b.cotacaoMaisRecente));
+}
+
+export function obterCotacoesDaCartela(
+  oportunidade: LeadOpportunity
+) {
+  return [...oportunidade.cotacoes];
+}
+
+export function obterAcompanhamentoDaOportunidade(
+  oportunidade: LeadOpportunity,
+  acompanhamentos: Acompanhamento[]
+) {
+  const acompanhamentoId = oportunidade.cotacoes[0]?.acompanhamentoId?.trim();
+  return acompanhamentoId
+    ? acompanhamentos.find((item) => item.id === acompanhamentoId)
+    : undefined;
+}
+
+export function ordenarOportunidadesPorProximaAcao(
+  oportunidades: LeadOpportunity[],
+  acompanhamentos: Acompanhamento[],
+  hoje?: Date
+) {
+  return ordenarPorProximaAcao(
+    oportunidades,
+    (oportunidade) => {
+      const acompanhamento = obterAcompanhamentoDaOportunidade(
+        oportunidade,
+        acompanhamentos
+      );
+      return {
+        tipoProximaAcao: acompanhamento?.tipoProximaAcao,
+        proximaAcaoEm: acompanhamento?.proximaAcaoEm ?? null,
+      };
+    },
+    hoje
+  );
 }
 
 export function montarCamposPesquisaOportunidade(oportunidade: LeadOpportunity) {
@@ -357,6 +488,7 @@ function LeadsContent() {
   });
   const [sessaoInteracao, setSessaoInteracao] = useState<SessaoInteracaoLeads | null>(null);
   const [cotacoes, setCotacoes] = useState<Cotacao[]>([]);
+  const [acompanhamentos, setAcompanhamentos] = useState<Acompanhamento[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [filtroStatus, setFiltroStatus] = useState<FiltroStatus>('abertos');
   const [termoPesquisa, setTermoPesquisa] = useState('');
@@ -366,6 +498,11 @@ function LeadsContent() {
   const [cotacaoTelefoneEmEdicao, setCotacaoTelefoneEmEdicao] = useState<Cotacao | null>(null);
   const [editTelefone, setEditTelefone] = useState('');
   const [salvandoTelefone, setSalvandoTelefone] = useState(false);
+  const [modalProximaAcaoAberto, setModalProximaAcaoAberto] = useState(false);
+  const [oportunidadeProximaAcao, setOportunidadeProximaAcao] = useState<LeadOpportunity | null>(null);
+  const [editTipoProximaAcao, setEditTipoProximaAcao] = useState<TipoProximaAcao>('DATA');
+  const [editProximaAcaoEm, setEditProximaAcaoEm] = useState('');
+  const [salvandoProximaAcao, setSalvandoProximaAcao] = useState(false);
   const sessaoProntaParaInteracao = sessaoLeadsProntaParaInteracao(
     user ?? undefined,
     sessaoInteracao,
@@ -417,6 +554,11 @@ function LeadsContent() {
         setCotacaoTelefoneEmEdicao(null);
         setEditTelefone('');
         setSalvandoTelefone(false);
+        setModalProximaAcaoAberto(false);
+        setOportunidadeProximaAcao(null);
+        setEditTipoProximaAcao('DATA');
+        setEditProximaAcaoEm('');
+        setSalvandoProximaAcao(false);
         setOportunidadeEmConversaoId(null);
         setClientesAdicionadosIds([]);
       }
@@ -443,6 +585,11 @@ function LeadsContent() {
         setCotacaoTelefoneEmEdicao(null);
         setEditTelefone('');
         setSalvandoTelefone(false);
+        setModalProximaAcaoAberto(false);
+        setOportunidadeProximaAcao(null);
+        setEditTipoProximaAcao('DATA');
+        setEditProximaAcaoEm('');
+        setSalvandoProximaAcao(false);
         setOportunidadeEmConversaoId(null);
         setClientesAdicionadosIds([]);
       });
@@ -458,15 +605,20 @@ function LeadsContent() {
       setCarregando(true);
 
       try {
-        const dados = await listarCotacoesDoUsuario(user.uid);
+        const [dadosCotacoes, dadosAcompanhamentos] = await Promise.all([
+          listarCotacoesDoUsuario(user.uid),
+          listarAcompanhamentosDoUsuario(user.uid),
+        ]);
 
         if (buscaAtiva) {
-          setCotacoes(dados);
+          setCotacoes(dadosCotacoes);
+          setAcompanhamentos(dadosAcompanhamentos);
         }
       } catch (error) {
         console.error('Erro ao buscar leads:', error);
         if (buscaAtiva) {
           setCotacoes([]);
+          setAcompanhamentos([]);
         }
       } finally {
         if (buscaAtiva) {
@@ -504,6 +656,11 @@ function LeadsContent() {
   const oportunidadesPesquisadas = useMemo(() => (
     filterBySearch(oportunidades, termoPesquisa, montarCamposPesquisaOportunidade)
   ), [oportunidades, termoPesquisa]);
+
+  const oportunidadesOrdenadas = useMemo(() => ordenarOportunidadesPorProximaAcao(
+    oportunidadesPesquisadas,
+    acompanhamentos
+  ), [acompanhamentos, oportunidadesPesquisadas]);
 
   const totalAbertos = cotacoes.filter((cotacao) => isLeadStatusAberto(cotacao.leadStatus)).length;
   const totalPerdidos = cotacoes.filter((cotacao) => cotacao.leadStatus === 'perdido').length;
@@ -593,6 +750,142 @@ function LeadsContent() {
         cotacaoAindaValida: cotacoes.some((item) => item.id === cotacaoId),
       })) {
         setSalvandoTelefone(false);
+      }
+    }
+  };
+
+  const abrirModalProximaAcao = (oportunidade: LeadOpportunity) => {
+    if (!sessaoProntaParaInteracao || !user) return;
+
+    const cotacoesCartela = obterCotacoesDaCartela(oportunidade);
+    if (
+      cotacoesCartela.length === 0
+      || cotacoesCartela.some((cotacao) => cotacao.ownerId !== user.uid)
+    ) return;
+
+    const acompanhamentoId = oportunidade.cotacoes[0]?.acompanhamentoId;
+    const acompanhamento = obterAcompanhamentoDaOportunidade(
+      oportunidade,
+      acompanhamentos
+    );
+    if (acompanhamentoId && !acompanhamento) {
+      alert('O acompanhamento vinculado não pôde ser carregado. Recarregue a página.');
+      return;
+    }
+
+    setOportunidadeProximaAcao({
+      ...oportunidade,
+      cotacoes: cotacoesCartela,
+    });
+    setEditTipoProximaAcao(
+      acompanhamento ? resolverTipoProximaAcao(acompanhamento) ?? 'DATA' : 'DATA'
+    );
+    setEditProximaAcaoEm(
+      formatarDataComercialParaInput(acompanhamento?.proximaAcaoEm ?? null)
+    );
+    setModalProximaAcaoAberto(true);
+  };
+
+  const fecharModalProximaAcao = () => {
+    if (salvandoProximaAcao) return;
+    setModalProximaAcaoAberto(false);
+    setOportunidadeProximaAcao(null);
+    setEditTipoProximaAcao('DATA');
+    setEditProximaAcaoEm('');
+  };
+
+  const salvarProximaAcao = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !oportunidadeProximaAcao || !sessaoProntaParaInteracao) return;
+
+    const cotacoesCartela = oportunidadeProximaAcao.cotacoes;
+    const cotacaoIds = cotacoesCartela.map((cotacao) => cotacao.id);
+    if (
+      cotacoesCartela.length === 0
+      || cotacoesCartela.some((cotacao) => cotacao.ownerId !== user.uid)
+    ) return;
+
+    const acompanhamentoExistente = obterAcompanhamentoDaOportunidade(
+      oportunidadeProximaAcao,
+      acompanhamentos
+    );
+    const acompanhamentoIdVinculado =
+      oportunidadeProximaAcao.cotacoes[0]?.acompanhamentoId;
+    if (acompanhamentoIdVinculado && !acompanhamentoExistente) {
+      alert('O acompanhamento vinculado não pôde ser carregado. Recarregue a página.');
+      return;
+    }
+
+    const agencyId = profileLoading ? '' : accessProfile.agencyId?.trim() ?? '';
+    if (!acompanhamentoExistente && !agencyId) {
+      alert('Não foi possível identificar a agência do seu perfil.');
+      return;
+    }
+
+    let proximaAcao;
+    try {
+      proximaAcao = montarDadosPersistenciaProximaAcao(
+        editTipoProximaAcao,
+        editProximaAcaoEm
+      );
+    } catch {
+      alert('Informe uma data válida para a próxima ação.');
+      return;
+    }
+
+    const identidadeMutacao = { ...identidadeSessaoRef.current };
+    const operacaoAindaValida = () => sessaoPodeMutarLeads({
+      userAtual: user,
+      sessaoInstalada: sessaoInteracao,
+      identidadePublicada: identidadeSessaoAtual,
+      identidadeRefAtual: identidadeSessaoRef.current,
+      identidadeCapturada: identidadeMutacao,
+      ownerId: user.uid,
+      cotacaoAindaValida: cotacaoIds.every((id) => (
+        cotacoes.some((cotacao) => cotacao.id === id && cotacao.ownerId === user.uid)
+      )),
+    });
+    if (!operacaoAindaValida()) return;
+
+    setSalvandoProximaAcao(true);
+    try {
+      const resultado = await persistirProximaAcaoCartela({
+        acompanhamentoExistente,
+        ownerId: user.uid,
+        agencyId,
+        cotacoes: cotacoesCartela,
+        ...proximaAcao,
+        confirmarMaterializacao: (quantidade) => window.confirm(
+          `Criar acompanhamento para esta cartela?\n\n${quantidade} ${quantidade === 1 ? 'cotação atual será vinculada' : 'cotações atuais serão vinculadas'}.`
+        ),
+        materializar: materializarAcompanhamento,
+        atualizar: atualizarProximaAcao,
+      });
+
+      if (resultado.status === 'cancelled' || !operacaoAindaValida()) return;
+
+      setAcompanhamentos((atuais) => atualizarAcompanhamentoLocalmente(
+        atuais,
+        resultado.acompanhamento
+      ));
+      if (resultado.status === 'materialized') {
+        setCotacoes((atuais) => vincularCotacoesLocalmente(
+          atuais,
+          cotacaoIds,
+          resultado.acompanhamento.id
+        ));
+      }
+      setModalProximaAcaoAberto(false);
+      setOportunidadeProximaAcao(null);
+      setEditTipoProximaAcao('DATA');
+      setEditProximaAcaoEm('');
+    } catch (error) {
+      if (!operacaoAindaValida()) return;
+      console.error('Erro ao salvar próxima ação:', error);
+      alert(error instanceof Error ? error.message : 'Erro ao salvar próxima ação.');
+    } finally {
+      if (operacaoAindaValida()) {
+        setSalvandoProximaAcao(false);
       }
     }
   };
@@ -766,7 +1059,7 @@ function LeadsContent() {
           />
         ) : (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {oportunidadesPesquisadas.map((oportunidade) => (
+            {oportunidadesOrdenadas.map((oportunidade) => (
               <article key={oportunidade.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
@@ -811,6 +1104,49 @@ function LeadsContent() {
                 <p className="mt-4 w-fit rounded-lg bg-slate-50 px-3 py-2 text-xs font-black uppercase text-slate-600">
                   {oportunidade.cotacoes.length} {oportunidade.cotacoes.length === 1 ? 'cotação relacionada' : 'cotações relacionadas'}
                 </p>
+
+                {(() => {
+                  const acompanhamentoId = oportunidade.cotacoes[0]?.acompanhamentoId;
+                  const acompanhamento = obterAcompanhamentoDaOportunidade(
+                    oportunidade,
+                    acompanhamentos
+                  );
+                  const vinculoIndisponivel = Boolean(acompanhamentoId && !acompanhamento);
+                  const classificacaoProximaAcao = vinculoIndisponivel
+                    ? null
+                    : classificarProximaAcao({
+                      tipoProximaAcao: acompanhamento?.tipoProximaAcao,
+                      proximaAcaoEm: acompanhamento?.proximaAcaoEm ?? null,
+                    });
+
+                  return (
+                    <section className="mt-4 rounded-lg border border-amber-100 bg-amber-50 p-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-[10px] font-black uppercase text-amber-700">Próxima ação</p>
+                        {classificacaoProximaAcao && (
+                          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-black uppercase ${CLASSIFICACAO_PROXIMA_ACAO_CLASSES[classificacaoProximaAcao]}`}>
+                            {classificacaoProximaAcao}
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-1 text-sm font-black text-slate-800">
+                        {vinculoIndisponivel
+                          ? 'Acompanhamento indisponível'
+                          : formatarProximaAcaoNoCard(acompanhamento)}
+                      </p>
+                      {sessaoProntaParaInteracao && (
+                        <button
+                          type="button"
+                          onClick={() => abrirModalProximaAcao(oportunidade)}
+                          disabled={vinculoIndisponivel || salvandoProximaAcao}
+                          className="mt-2 rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs font-black uppercase text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {acompanhamento ? 'Editar acompanhamento' : 'Definir acompanhamento'}
+                        </button>
+                      )}
+                    </section>
+                  );
+                })()}
 
                 {sessaoProntaParaInteracao
                   && oportunidade.cotacaoMaisRecente.leadStatus === 'fechado' && (
@@ -910,6 +1246,76 @@ function LeadsContent() {
           </div>
         )}
       </div>
+
+      {sessaoProntaParaInteracao
+        && modalProximaAcaoAberto
+        && oportunidadeProximaAcao && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <h2 className="text-xl font-bold text-slate-800">Próxima ação</h2>
+            {!obterAcompanhamentoDaOportunidade(
+              oportunidadeProximaAcao,
+              acompanhamentos
+            ) && (
+              <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-900">
+                Este é o primeiro acompanhamento da cartela. Ao confirmar, todas as cotações
+                que atualmente a compõem serão vinculadas ao acompanhamento.
+              </p>
+            )}
+
+            <form onSubmit={salvarProximaAcao} className="mt-5 flex flex-col gap-4">
+              <fieldset className="space-y-3">
+                <legend className="text-sm font-semibold text-slate-600">Próxima ação</legend>
+                {OPCOES_TIPO_PROXIMA_ACAO.map((opcao) => (
+                  <label key={opcao.value} className="flex items-center gap-3 text-sm font-semibold text-slate-700">
+                    <input
+                      type="radio"
+                      name="tipoProximaAcao"
+                      value={opcao.value}
+                      checked={editTipoProximaAcao === opcao.value}
+                      onChange={() => setEditTipoProximaAcao(opcao.value)}
+                      disabled={salvandoProximaAcao || !sessaoProntaParaInteracao}
+                    />
+                    {opcao.label}
+                  </label>
+                ))}
+              </fieldset>
+
+              {editTipoProximaAcao === 'DATA' && (
+                <label className="block">
+                  <span className="text-sm font-semibold text-slate-600">Data</span>
+                  <input
+                    type="date"
+                    value={editProximaAcaoEm}
+                    onChange={(e) => setEditProximaAcaoEm(e.target.value)}
+                    required
+                    disabled={salvandoProximaAcao || !sessaoProntaParaInteracao}
+                    className="mt-1 w-full rounded-lg border px-4 py-2 outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </label>
+              )}
+
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={fecharModalProximaAcao}
+                  disabled={salvandoProximaAcao || !sessaoProntaParaInteracao}
+                  className="rounded-lg px-4 py-2 font-semibold text-slate-500 hover:bg-slate-100 disabled:opacity-60"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={salvandoProximaAcao || !sessaoProntaParaInteracao}
+                  className="rounded-lg bg-amber-600 px-6 py-2 font-bold text-white shadow-md hover:bg-amber-700 disabled:opacity-60"
+                >
+                  {salvandoProximaAcao ? 'Salvando...' : 'Salvar acompanhamento'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {sessaoProntaParaInteracao
         && modalTelefoneAberto

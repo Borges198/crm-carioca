@@ -1,0 +1,6 @@
+.env
+.env.*
+benchmark-results/
+artifacts/
+dataset/real-anon/
+node_modules/

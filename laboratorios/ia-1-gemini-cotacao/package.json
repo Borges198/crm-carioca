@@ -1,0 +1,17 @@
+{
+  "name": "ia-1-gemini-cotacao",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "benchmark": "node src/run-benchmark.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@google/genai": "^2.19.0",
+    "ajv": "^8.20.0"
+  }
+}
